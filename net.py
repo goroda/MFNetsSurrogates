@@ -1,4 +1,11 @@
-"""  Multifidelity Surrogates """
+"""  Multifidelity Surrogates 
+
+Author: Alex Gorodetsky, goroda@umich.edu
+
+Copyright (c) 2020, Alex Gorodetsky
+
+License: MIT
+"""
 
 import copy
 try:
@@ -10,6 +17,8 @@ from functools import partial
 import numpy as np
 
 import networkx as nx
+# print("NetworkX Version = ", nx.__version__)
+
 import scipy.optimize as sciopt
 
 def least_squares(target, predicted, std=1e0):
@@ -58,7 +67,6 @@ def lin(param, xinput):
     grad : np.ndarray (nsamples,nparams)
       gradient of the linear model with respect to the model parameters
     """
-    print(param.shape,xinput.shape)
     one = np.ones((xinput.shape[0], 1))
     grad = np.concatenate((one, xinput), axis=1)
     return param[0] + np.dot(param[1:], xinput.T), grad
@@ -248,7 +256,7 @@ class MFSurrogate():
 
             pass_down = self.graph.nodes[node]['pass_down']
             for parent in self.graph.predecessors(node):
-                self.graph.node[parent]['pass_down'] += \
+                self.graph.nodes[parent]['pass_down'] += \
                     pass_down * self.graph.edges[parent, node]['eval']
                 self.graph.edges[parent, node]['derivative'] = \
                     np.dot(pass_down,self.graph.edges[parent, node]['pre_grad'])
@@ -357,7 +365,7 @@ class MFSurrogate():
         -------
         Upon completion of this function, the parameters of the graph are set
         to the values that best fit the data, as defined by *func*
-        """wj
+        """
         bounds = list(zip([-np.inf]*self.nparam, [np.inf]*self.nparam))
         param0 = copy.deepcopy(param0in)
 

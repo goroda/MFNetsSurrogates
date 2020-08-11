@@ -13,6 +13,7 @@ This library depends on
 - [[https://www.numpy.org][NumPy]]
 - [[https://www.scipy.org][SciPy]] 
 - [[https://networkx.github.io/documentation/stable/index.html][NetworkX]]
+- [[https://sandialabs.github.io/pyapprox/index.html][PyApprox]] (optional for L1 regularization)
 
 ** Usage
 
@@ -23,10 +24,11 @@ Essentially, the process for building and training a surrogate has two steps
 1. Setup a network
 2. Train a network
 
-A multifidelity surrogate is defined by a set of functions along the nodes and edges. Each of these functions can be user specified.
-Below is an example of using linear functions along the nodes and edges for the case where training data comes form eight information sources.
+** Detailed example
+   A multifidelity surrogate is defined by a set of functions along the nodes and edges. Each of these functions can be user specified.
+   Below is an example of using linear functions along the nodes and edges for the case where training data comes form eight information sources.
 
-#+BEGIN_SRC python
+   #+BEGIN_SRC python
 def lin(param, xinput):
     """A linear parametric model 
 
@@ -50,10 +52,10 @@ def lin(param, xinput):
     one = np.ones((xinput.shape[0], 1))
     grad = np.concatenate((one, xinput), axis=1)
     return param[0] + np.dot(param[1:], xinput.T), grad
-#+END_SRC
+   #+END_SRC
 
-Next we setup a network for the surrogates
-#+BEGIN_SRC python 
+   Next we setup a network for the surrogates
+   #+BEGIN_SRC python 
 def make_graph_8(nnode_param=2, nedge_param=2, linfunc=lin):
     """A graph with 8 nodes
 
@@ -85,10 +87,10 @@ def make_graph_8(nnode_param=2, nedge_param=2, linfunc=lin):
 
     roots = set([1, 2, 3])
     return graph, roots
-#+END_SRC
+   #+END_SRC
 
-Next, we convert the graph into a multifidelity surrogate. 
-#+BEGIN_SRC python 
+   Next, we convert the graph into a multifidelity surrogate. 
+   #+BEGIN_SRC python 
 from net import MFSurrogate
 num_nodes = 8
 graph, roots = make_graph_8(2, 2, linfunc=lin)
@@ -107,10 +109,10 @@ surr_learned = surr.train(param0, all_nodes, input_train, output_train, std, nit
 # samples should be some inputs at which to evaluate the model
 evals_hf = surr_learned.forward(samples, num_nodes)
 evals_surr = surr_learned.get_evals() # can also get all the fidelity evaluations at *samples*
-#+END_SRC
+   #+END_SRC
 
-To clarify the training function signature , below I reproduce the documentation of the function
-#+BEGIN_SRC python 
+   To clarify the training function signature , below I reproduce the documentation of the function
+   #+BEGIN_SRC python 
     def train(self, param0in, nodes, xtrain, ytrain, stdtrain, niters=200,
               func=least_squares,
               verbose=False, warmup=True, opts=dict()):
@@ -160,7 +162,12 @@ To clarify the training function signature , below I reproduce the documentation
         to the values that best fit the data, as defined by *func*
         """
    ...
-#+END_SRC
+   #+END_SRC
+
+
+** Complete example
+   In this section we provide a set of code that gives a 
+
 
 ** Citation
 

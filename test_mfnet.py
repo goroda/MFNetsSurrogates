@@ -54,8 +54,6 @@ try:
     pyapprox_available=True
 except ImportError:
     pyapprox_available=False
-skiptest = unittest.skipIf(
-    pyapprox_available, reason="PyApprox not available")
 
 class TestMfnet(unittest.TestCase):
 
@@ -165,13 +163,12 @@ class TestMfnet(unittest.TestCase):
         predict_test = mfsurr_learn.forward(x_test, node)[0]
         assert np.linalg.norm(predict_test-y_test)/np.sqrt(ntest)<1e-8
 
-    @skiptest
+    @unittest.skipUnless(pyapprox_available, "PyApprox not available")
     def test_l1_opt(self):
         np.random.seed(2)
 
         nnode_param, nedge_param = 2, 1
-        graph, roots = make_graph_8(
-            nnode_param,nedge_param,linfunc=monomial_1d_lin)
+        graph, roots = make_graph_8(nnode_param,nedge_param,linfunc=monomial_1d_lin)
         node = 8
 
         ## Truth
@@ -206,31 +203,17 @@ class TestMfnet(unittest.TestCase):
         param_start = np.random.randn(nparam)
         
         obj = partial(
-            learn_obj_grad_both, graph = mfsurr_learn, node=node, x=x, y=y,
-            std=std)
+            learn_obj_grad_both, graph = mfsurr_learn, node=node, x=x, y=y, std=std)
 
         lamda = 1e-4
-        #options = {'tol':1e-8,'maxiter':int(1e4),'print_level':5,
-        #           'method':'ipopt','mu_strategy':'adaptive',
-        #            'obj_scaling_factor':float(1e-3)}
-        #coef, res = lasso(obj,True,None,param_start,lamda,options)
         eps=1e-8
-        options = {'ftol':1e-8,'disp':True,'maxiter':1000,'iprint':0,
-                   'method':'slsqp'}
+        options = {'ftol':1e-8,'disp':False,'maxiter':1000,'iprint':0, 'method':'slsqp'}
 
-        l1_coef = nonlinear_basis_pursuit(
-            obj,True,None,param_start,options,eps**2)
+        l1_coef = nonlinear_basis_pursuit(obj,True,None,param_start,options,eps**2)
 
         mfsurr_learn.set_param(l1_coef)
         predict = mfsurr_learn.forward(x, node)[0]
 
-        #print("res= ", res)
-        #print('est param',l1_coef)
-        #print('true param',mfsurr_true.get_param())
-        #print('l2_norm',obj(l1_coef)[0])
-        #print('nnz coef',np.count_nonzero(np.absolute(l1_coef)>1e-8))
-        #print(mfsurr_learn.graph.nodes[node]['param'],node)
-        print (np.linalg.norm(predict-y)**2/2)
         assert np.linalg.norm(predict-y)**2/2<2e-14
 
         ntest=100
@@ -243,6 +226,5 @@ class TestMfnet(unittest.TestCase):
     
     
 if __name__== "__main__":    
-    mfnet_test_suite = unittest.TestLoader().loadTestsFromTestCase(
-        TestMfnet)
+    mfnet_test_suite = unittest.TestLoader().loadTestsFromTestCase(TestMfnet)
     unittest.TextTestRunner(verbosity=2).run(mfnet_test_suite)
