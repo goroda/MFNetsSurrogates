@@ -1,0 +1,181 @@
+
+
+* Multifidelity networked surrogates
+
+A set of routines to enable construction of completely unstructured multifidelity surrogate models for fusing multiple information sources. For a detailed background of how it works please see
+
+- Gorodetsky, A. A., Jakeman, J. D., and Geraci, G. "MFNets: Learning network representations for multifidelity surrogates." 2020, http://arxiv.org/abs/2008.02672
+
+** Dependencies
+   
+This library depends on
+
+- [[https://www.numpy.org][NumPy]]
+- [[https://www.scipy.org][SciPy]] 
+- [[https://networkx.github.io/documentation/stable/index.html][NetworkX]]
+
+** Usage
+
+The main software is in =net.py=, there are tests in =test_mfnet.py=. 
+
+Essentially, the process for building and training a surrogate has two steps
+
+1. Setup a network
+2. Train a network
+
+A multifidelity surrogate is defined by a set of functions along the nodes and edges. Each of these functions can be user specified.
+Below is an example of using linear functions along the nodes and edges for the case where training data comes form eight information sources.
+
+#+BEGIN_SRC python
+def lin(param, xinput):
+    """A linear parametric model 
+
+    Parameters
+    ----------
+    param : np.ndarray (nparams)
+       The parameters of the model
+
+    xinput : np.ndarray (nsamples,nparams)
+       The independent variables of the model
+
+    Returns
+    -------
+    vals : np.ndarray (nsamples)
+      Evaluation of the linear model
+
+    grad : np.ndarray (nsamples,nparams)
+      gradient of the linear model with respect to the model parameters
+    """
+    print(param.shape,xinput.shape)
+    one = np.ones((xinput.shape[0], 1))
+    grad = np.concatenate((one, xinput), axis=1)
+    return param[0] + np.dot(param[1:], xinput.T), grad
+#+END_SRC
+
+Next we setup a network for the surrogates
+#+BEGIN_SRC python 
+def make_graph_8(nnode_param=2, nedge_param=2, linfunc=lin):
+    """A graph with 8 nodes
+
+    3 -> 7 -> 8
+              ^
+              |
+         1 -> 4
+            / ^
+           /  |
+    2 -> 5 -> 6
+    """
+
+    graph = nx.DiGraph()
+
+    pnodes = np.random.randn(10, nnode_param)
+    pedges = np.random.randn(8, nedge_param)
+
+    for node in range(1, 9):
+        graph.add_node(node, param=pnodes[node-1], func=linfunc)
+
+    graph.add_edge(1, 4, param=pedges[0, :], func=linfunc)
+    graph.add_edge(2, 5, param=pedges[1, :], func=linfunc)
+    graph.add_edge(5, 6, param=pedges[2, :], func=linfunc)
+    graph.add_edge(6, 4, param=pedges[3, :], func=linfunc)
+    graph.add_edge(3, 7, param=pedges[4, :], func=linfunc)
+    graph.add_edge(7, 8, param=pedges[5, :], func=linfunc)
+    graph.add_edge(4, 8, param=pedges[6, :], func=linfunc)
+    graph.add_edge(5, 4, param=pedges[7, :], func=linfunc)
+
+    roots = set([1, 2, 3])
+    return graph, roots
+#+END_SRC
+
+Next, we convert the graph into a multifidelity surrogate. 
+#+BEGIN_SRC python 
+from net import MFSurrogate
+num_nodes = 8
+graph, roots = make_graph_8(2, 2, linfunc=lin)
+
+surr = MFSurrogate(graph, roots) # create the surrogate
+param0 = surr.get_param() # get the initial parameters (randomized)
+
+# The script below is training
+# all_nodes -> list of node indices for which data is available
+# input_train -> list of input features for the nodes in all_nodes
+# ouput_train -> list of the output for each of the nodes
+# std         -> list of standard deviations of the errors for each of the training sets
+surr_learned = surr.train(param0, all_nodes, input_train, output_train, std, niters=400, verbose=False, warmup=True)
+
+# Get evaluations of the highest fidelity model
+# samples should be some inputs at which to evaluate the model
+evals_hf = surr_learned.forward(samples, num_nodes)
+evals_surr = surr_learned.get_evals() # can also get all the fidelity evaluations at *samples*
+#+END_SRC
+
+To clarify the training function signature , below I reproduce the documentation of the function
+#+BEGIN_SRC python 
+    def train(self, param0in, nodes, xtrain, ytrain, stdtrain, niters=200,
+              func=least_squares,
+              verbose=False, warmup=True, opts=dict()):
+        """Train the multifidelity surrogate.
+
+        This is the main entrance point for data-driven training.
+
+        Parameters
+        ----------
+        param0in : np.ndarray (nparams)
+            The initial guess for the parameters
+
+        nodes : list
+            A list of nodes for which data is available
+
+        xtrain : list
+            A list of input features for each node in *nodes*
+
+        ytrain : list
+            A list of output values for each node in *nodes*
+
+        stdtrain : float
+            The standard devaition for data for each node in *nodes*
+
+        niters : integer
+            The number of optimization iterations
+
+        func : callable
+            A scalar valued objective function with the signature
+
+            ``func(target, predicted) ->  val (float), grad (np.ndarray)``
+
+            where ``target`` is a np.ndarray of shape (nobs)
+            containing the observations and ``predicted`` is a np.ndarray of
+            shape (nobs) containing the model predictions of the observations
+
+        verbose : integer
+            The verbosity level
+
+        warmup : boolean
+            Specify whether or not to progressively find a good guess before
+            optimizing
+
+        Returns
+        -------
+        Upon completion of this function, the parameters of the graph are set
+        to the values that best fit the data, as defined by *func*
+        """
+   ...
+#+END_SRC
+
+** Citation
+
+Please cite the following paper if you find this code to be useful
+
+- Gorodetsky, A. A., Jakeman, J. D., and Geraci, G. "MFNets: Learning network representations for multifidelity surrogates." 2020, http://arxiv.org/abs/2008.02672
+
+
+
+** More information
+
+ Author: Alex Gorodetsky 
+
+ Contact: [[mailto:goroda@umich.edu][goroda@umich.edu]]
+
+ Copyright (c) 2020 Alex Gorodetsky  
+
+ License: MIT

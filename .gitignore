@@ -1,0 +1,7 @@
+*~
+build*
+*.DS_Store
+*.dat
+*__pycache__*
+*flycheck*
+python/results*
