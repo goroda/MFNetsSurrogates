@@ -17,7 +17,7 @@ This library depends on
 
 ** Usage
 
-The main software is in =net.py=, there are tests in =test_mfnet.py=. 
+The main routines are in =net.py=, there are tests in =test_mfnet.py=. 
 
 Essentially, the process for building and training a surrogate has two steps
 
@@ -165,8 +165,6 @@ evals_surr = surr_learned.get_evals() # can also get all the fidelity evaluation
    #+END_SRC
 
 
-** Complete example
-   In this section we provide a set of code that gives a 
 
 
 ** Citation

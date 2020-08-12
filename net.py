@@ -21,6 +21,15 @@ import networkx as nx
 
 import scipy.optimize as sciopt
 
+from functools import partial
+
+pyapprox_is_installed = True
+try:
+    from pyapprox.l1_minimization import nonlinear_basis_pursuit, lasso
+except ModuleNotFoundError:
+    pyapprox_is_installed = False
+
+
 def least_squares(target, predicted, std=1e0):
     """ Evaluate the least squares objective function 
 
@@ -361,6 +370,9 @@ class MFSurrogate():
             Specify whether or not to progressively find a good guess before
             optimizing
 
+        opts : dictionary
+            Specify the type of loss function: 'lstsq' for squared error, anything else for L1 regularization, 'lambda' for regularization value
+        
         Returns
         -------
         Upon completion of this function, the parameters of the graph are set
@@ -402,8 +414,19 @@ class MFSurrogate():
                 args=(func, self, nodes, xtrain, ytrain, stdtrain),
                 method='L-BFGS-B', jac=True,
                 options=options)
+        elif pyapprox_is_installed is True:
+            
+            obj = partial(
+                optimize_obj,optf=least_squares,graph=self,nodes=nodes,
+                xin_l=xtrain, yin_l=ytrain, std_l=stdtrain)
+            lamda = opts['lambda']
+            options = {'ftol':1e-12,'disp':False,
+                       'maxiter':1e3, 'method':'slsqp'};
+            l1_coef, res = lasso(obj,True,None,param0,lamda,options)
+            #res.x includes slack variables so remove these
+            res.x=l1_coef
         else:
-            raise Exception("non lstsq loss is not yet accepted")
+            raise Exception("Specified loss is not accepted")
 
         self.set_param(res.x)
         return self
