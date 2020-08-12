@@ -1,4 +1,4 @@
-"""  Multifidelity Surrogates 
+"""  Multifidelity Surrogate Modeling via network models
 
 Author: Alex Gorodetsky, goroda@umich.edu
 
