@@ -1,4 +1,4 @@
-"""  Multifidelity Surrogate Modeling via Directed Networks 
+"""Multifidelity Surrogate Modeling via Directed Networks.
 
 Author: Alex Gorodetsky, goroda@umich.edu
 
@@ -31,7 +31,7 @@ except ModuleNotFoundError:
 
 
 def least_squares(target, predicted, std=1e0):
-    """ Evaluate the least squares objective function 
+    """Evaluate the least squares objective function.
 
     Parameters
     ----------
@@ -48,7 +48,7 @@ def least_squares(target, predicted, std=1e0):
     -------
     obj : float
         The value of the least squares objective function
-    
+
     grad : np.ndarray (nobs)
         The gradient of ``obj``
     """
@@ -57,8 +57,9 @@ def least_squares(target, predicted, std=1e0):
     grad = - std**-2 * resid
     return obj, grad
 
+
 def lin(param, xinput):
-    """A linear parametric model 
+    """Compute with a linear parametric model.
 
     Parameters
     ----------
@@ -80,8 +81,9 @@ def lin(param, xinput):
     grad = np.concatenate((one, xinput), axis=1)
     return param[0] + np.dot(param[1:], xinput.T), grad
 
+
 def monomial_1d_lin(param, xinput):
-    """Linear Model with Monomial basis functions
+    """Compute with a Linear Model with Monomial basis functions.
 
     p[0]+sum(x**p[1:])
 
@@ -106,17 +108,17 @@ def monomial_1d_lin(param, xinput):
     grad = basis
     return vals, grad
 
+
 class MFSurrogate():
-    """Multifidelity surrogate
+    """Multifidelity surrogate.
 
     A surrogate consists of a graph where the edges and nodes are functions
     Each node represents a particular information sources and the edges
     describe the relationships between the information sources
-
     """
+
     def __init__(self, graph, roots, copy_data=True):
-        """Initialize a multifidelity surrogate by providing a graph and the
-        roots of the graph
+        """Initialize a multifidelity surrogate via a graph and its roots.
 
         Parameters
         ----------
@@ -141,7 +143,7 @@ class MFSurrogate():
         self.nparam = graph_to_vec(self.graph).shape[0]
 
     def get_nparam(self):
-        """Number of parameters parameterizing the graph
+        """Get the number of parameters parameterizing the graph.
 
         Returns
         -------
@@ -308,7 +310,7 @@ class MFSurrogate():
         """
         self.graph = vec_to_graph(
             np.zeros(self.nparam), self.graph, attribute='derivative')
-
+        
     def zero_attributes(self):
         """Zero all attributes except 'func' and 'param' """
 
