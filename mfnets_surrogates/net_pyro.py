@@ -74,12 +74,18 @@ class MFNetProbModel(pyro.nn.PyroModule):
         self.sigma = noise_var
         convert_to_pyro(self.model)
         
-    def forward(self, x, y=None):
+    def forward(self, x, targets, y=None):
         """Evaluate model."""
-        mean = self.model(x).flatten()
-        with pyro.plate("data", x.shape[0]):
-            obs = pyro.sample("obs", dist.Normal(mean, self.sigma), obs=y)
-        return mean
+        means = self.model(x, targets)
+        if y == None:
+            for ii, (m, xx) in enumerate(zip(means, xx)):
+                with pyro.plate(f"data{ii+1}", xx.shape[0]):
+                    obs = pyro.sample(f"obs{ii+1}", dist.Normal(m.flatten(), self.sigma), obs=None)
+        else:
+            for ii, (m, xx, yy) in enumerate(zip(means, xx, y)):
+                with pyro.plate(f"data{ii+1}", xx.shape[0]):
+                    obs = pyro.sample(f"obs{ii+1}", dist.Normal(m.flatten(), self.sigma), obs=yy)
+        return means
 
 if __name__ == "__main__":
 
@@ -92,7 +98,7 @@ if __name__ == "__main__":
     # model = net.MFNetTorch(graph, root)    
     # model.set_target_node(2)
     model = MFNetProbModel(graph, roots, noise_var=1e-4)
-    model.model.set_target_node(2)
+    # model.model.set_target_node(2)
 
     x = torch.linspace(-1,1,10).reshape(10, 1)
     # with pyro.poutine.trace() as tr:
