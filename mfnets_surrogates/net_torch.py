@@ -142,7 +142,6 @@ class MFNetTorch(nn.Module):
                 queue.put(node)
 
         while not queue.empty():
-
             node = queue.get()
             feval = self.graph.nodes[node]['eval']
             for child in self.graph.successors(node):
@@ -172,19 +171,8 @@ class MFNetTorch(nn.Module):
 
         Returns
         -------
-        This function adds the following attributes to the underlying graph
-
-        eval :
-            stores the evaluation of the function represented by the
-            particular node / edge the evaluations at the nodes are
-            cumulative (summing up all ancestors) whereas the edges are local
-
-        parents-left : set
-            internal attribute needed for accounting
-
+        list of evaluations for each of the target nodes
         """
-
-        # assert self.target_node is not None
         return [self.eval_target_node(x,t) for x,t in zip(xinput, target_nodes)]
 
     def eval_loss(self, data, targets, loss_fns):
