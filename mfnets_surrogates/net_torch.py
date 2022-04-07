@@ -12,7 +12,7 @@ except ImportError:
 
 import matplotlib.pyplot as plt
 
-dtype = torch.float
+# dtype = torch.float
 device = torch.device("cpu")
 
 
@@ -125,6 +125,7 @@ class MFNetTorch(nn.Module):
             internal attribute needed for accounting
 
         """
+        self.zero_attributes()
         assert self.target_node is not None
         anc = nx.ancestors(self.graph, self.target_node)
         anc_and_target = anc.union(set([self.target_node]))
