@@ -50,8 +50,7 @@ class TestMfnet(unittest.TestCase):
         ndata = [0] * 8
         ndata[7] = 500
         x = torch.rand(ndata[7], 1)
-        mfsurr_true.set_target_node(node)
-        y =  mfsurr_true.forward(x).flatten()
+        y =  mfsurr_true.forward([x],[8])[0].flatten()
         std = 1.#1e-4
 
         graph_learn, roots_learn = make_graph_8()        
@@ -66,8 +65,7 @@ class TestMfnet(unittest.TestCase):
         mfsurr_learn.train(data_loaders, [8], loss_fns[7:])
 
         with torch.no_grad():
-            mfsurr_learn.set_target_node(8)
-            predict = mfsurr_learn(x).flatten()
+            predict = mfsurr_learn([x],[8])[0].flatten()
             err = torch.linalg.norm(predict-y)**2/2
             print("err = ", err)
             assert err<1e-4
@@ -75,8 +73,8 @@ class TestMfnet(unittest.TestCase):
         ntest=1000
         x_test = torch.rand(ntest, dx)
         with torch.no_grad():
-            y_test =  mfsurr_true.forward(x_test).flatten()
-            predict_test = mfsurr_learn.forward(x_test).flatten()
+            y_test =  mfsurr_true.forward([x_test],[8])[0].flatten()
+            predict_test = mfsurr_learn.forward([x_test], [8])[0].flatten()
             err = torch.linalg.norm(predict_test-y_test)/np.sqrt(ntest)
             print("err = ", err)
             assert err<1e-3

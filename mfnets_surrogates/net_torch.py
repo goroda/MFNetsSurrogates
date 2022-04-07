@@ -82,9 +82,9 @@ class MFNetTorch(nn.Module):
 
         # self.modules_list.extend([f for _,_,f in self.graph.edges.data('func')])
 
-    def set_target_node(self, target_node):
-        """Set the target node for learning."""
-        self.target_node = target_node
+    # def set_target_node(self, target_node):
+    #     """Set the target node for learning."""
+    #     self.target_node = target_node
 
     def zero_attributes(self):
         """Zero all attributes except 'func' and 'param'."""
@@ -101,16 +101,16 @@ class MFNetTorch(nn.Module):
                 except: # what exception is it?
                     continue
 
-    def forward(self, xinput):
+    def eval_target_node(self, xinput, target_node):
         """Evaluate the surrogate output at target_node.
 
         Parameters
         ----------
-        xinput : np.ndarray (nsamples,nparams)
-            The independent variables of the model
+        xinput :  np.ndarray (nsamples,nparams)
+            The independent variables of the model at which to evaluate target node
 
         target_node : integer
-            The id of the node under consideration
+            The id of the nodes to evaluate
 
         Returns
         -------
@@ -126,9 +126,8 @@ class MFNetTorch(nn.Module):
 
         """
         self.zero_attributes()
-        assert self.target_node is not None
-        anc = nx.ancestors(self.graph, self.target_node)
-        anc_and_target = anc.union(set([self.target_node]))
+        anc = nx.ancestors(self.graph, target_node)
+        anc_and_target = anc.union(set([target_node]))
         relevant_root_nodes = anc.intersection(self.roots)
 
         # Evaluate the target nodes and all ancestral nodes and put the root
@@ -137,11 +136,9 @@ class MFNetTorch(nn.Module):
         for node in anc_and_target:
             pval = self.graph.nodes[node]['func'](xinput)
             self.graph.nodes[node]['eval'] = pval
-            self.graph.nodes[node]['parents_left'] = \
-                set(self.graph.predecessors(node))
+            self.graph.nodes[node]['parents_left'] = set(self.graph.predecessors(node))
 
             if node in relevant_root_nodes:
-
                 queue.put(node)
 
         while not queue.empty():
@@ -161,20 +158,63 @@ class MFNetTorch(nn.Module):
                         queue.put(child)
 
         return self.graph.nodes[node]['eval']
+        
+    def forward(self, xinput, target_nodes):
+        """Evaluate the surrogate output at target_node.
+
+        Parameters
+        ----------
+        xinput : List of np.ndarrays (nsamples,nparams)
+            The independent variables of the model at which to evaluate target nodes
+
+        target_node : List of integers
+            The id of the nodes to evaluate
+
+        Returns
+        -------
+        This function adds the following attributes to the underlying graph
+
+        eval :
+            stores the evaluation of the function represented by the
+            particular node / edge the evaluations at the nodes are
+            cumulative (summing up all ancestors) whereas the edges are local
+
+        parents-left : set
+            internal attribute needed for accounting
+
+        """
+
+        # assert self.target_node is not None
+        return [self.eval_target_node(x,t) for x,t in zip(xinput, target_nodes)]
 
     def eval_loss(self, data, targets, loss_fns):
         """Evaluate loss function."""
         loss = 0
-        for target, dat, loss_fn in zip(targets, data, loss_fns):
-            self.set_target_node(target)
-            self.zero_attributes()        
-            for batch, (X, y) in enumerate(dat):
-                with torch.nn.utils.parametrize.cached():
-                    pred = self(X).flatten()
-                new_loss = loss_fn(pred, y)
-                loss += new_loss
-            
+        x = []
+        y = []
+        for dat in data:
+            # should only be one batch because only LBFGS can be used
+            for batch, (X, Y) in enumerate(dat):
+                x.append(X)
+                y.append(Y)
+
+        pred = self(x, targets)
+        loss = 0
+        for p,ydat,loss_fn in zip(pred, y, loss_fns):
+            loss += loss_fn(p.reshape(ydat.shape), ydat)
+
         return loss
+    
+        # for target, dat, loss_fn in zip(targets, data, loss_fns):
+        #     self.set_target_node(target)
+        #     self.zero_attributes()        
+        #     for batch, (X, y) in enumerate(dat):
+        #         with torch.nn.utils.parametrize.cached():
+        #             pred = self(X).flatten()
+        #         new_loss = loss_fn(pred, y)
+        #         loss += new_loss
+            
+        # return loss
 
     def train(self, data, targets, loss_fns):
         """Train the model."""
@@ -196,7 +236,6 @@ class MFNetTorch(nn.Module):
 
         optimizer.step(closure)
 
-
         
 def generate_data(model, ndata):
     """Generate data."""
@@ -204,13 +243,10 @@ def generate_data(model, ndata):
     xlf = torch.rand(ndata_lf, 1) * 6 - 3
     xhf = torch.rand(ndata_hf, 1) * 6 - 3
     with torch.no_grad():
-        model.set_target_node(1)
-        ylf = model(xlf).flatten()
-        model.set_target_node(2)
-        yhf = model(xhf).flatten()
+        y = model([xlf, xhf], [1, 2])
 
-    d1 = ArrayDataset(xlf, ylf)
-    d2 = ArrayDataset(xhf, yhf)
+    d1 = ArrayDataset(xlf, y[0].flatten())
+    d2 = ArrayDataset(xhf, y[1].flatten())
     data = (d1, d2)
     return data
 
@@ -221,15 +257,16 @@ def construct_loss_funcs(model):
             
 def plot_funcs(model, x, data=None):
     """Plot the univariate functions."""
+    nnodes = len(model.graph.nodes)
     with torch.no_grad():
-        model.set_target_node(1)
-        ylf = model(x)
-        model.set_target_node(2)
-        yhf = model(x)
+        y = model([x]*nnodes, list(range(1,nnodes+1)))
+        # ylf = model(x)
+
+        # yhf = model(x)
         
     plt.figure()
-    plt.plot(x, ylf, label='low-fidelity')
-    plt.plot(x, yhf, label='high-fidelity')
+    plt.plot(x, y[0], label='low-fidelity')
+    plt.plot(x, y[1], label='high-fidelity')
 
     if data != None:
         plt.plot(data[0].x, data[0].y, 'ro', label='Low-fidelity Data')
@@ -248,17 +285,13 @@ if __name__ == "__main__":
     # for param in model.named_parameters():
     #     print(param)
     
-    x = torch.linspace(-3, 3, 10).expand(1,10).transpose(0,1)
+    x = torch.linspace(-3, 3, 10).reshape(10, 1)
     plot_funcs(model, x)
 
     loss_fns = construct_loss_funcs(model)
     data = generate_data(model, [20, 20])
     data_loaders = [torch.utils.data.DataLoader(d, batch_size=len(d), shuffle=False)
-               for d in data]
-
-
-    # loss = eval_loss(model, data_loaders, [1, 2], loss_fns)
-    # print("loss = ", loss)
+                    for d in data]
 
 
     graph2, root2 = make_graph_2()
