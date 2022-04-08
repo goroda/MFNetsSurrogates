@@ -207,7 +207,7 @@ if __name__ == "__main__":
                 print(f"Saving outputs of Node {node} to: ", fname)
                 np.savetxt(fname, v)
                 
-            df = net_pyro.mcmc_samples_to_pandas(mcmc.get_samples())
+            df = net_pyro.samples_to_pandas(mcmc.get_samples())
             
             sample_filename = f"{save_evals_filename}_param_samples.csv"
             print("Saving samples to ", sample_filename)

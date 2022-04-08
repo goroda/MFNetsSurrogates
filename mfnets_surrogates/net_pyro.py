@@ -2,16 +2,31 @@
 
 import functools
 import itertools
+
+import matplotlib.pyplot as plt
+import seaborn as sns
+import pandas as pd
+
 import torch
+
 import pyro
-import net_torch as net
 import pyro.distributions as dist
 from pyro.nn.module import to_pyro_module_
 from pyro.infer import MCMC, NUTS
 from pyro.infer import Predictive
-import matplotlib.pyplot as plt
-import seaborn as sns
-import pandas as pd
+from pyro.optim import Adam
+from pyro.infer import SVI, Trace_ELBO
+from pyro.infer.autoguide import (
+    AutoDelta,
+    AutoNormal,
+    AutoMultivariateNormal,
+    AutoLowRankMultivariateNormal,
+    AutoGuideList,
+    AutoIAFNormal,
+    init_to_feasible,
+)
+
+import net_torch as net
 
 # from pandas.tools.plotting import scatter_matrix
 # import pandas.tools.plotting as pandaplot
@@ -90,7 +105,7 @@ class MFNetProbModel(pyro.nn.PyroModule):
                     obs = pyro.sample(f"obs{ii+1}", dist.Normal(m.flatten(), self.sigma), obs=yy)
         return [m.flatten() for m in means]
 
-def mcmc_samples_to_pandas(samples):
+def samples_to_pandas(samples):
     """Convert the samples of parameters to a pandas dataframe."""
     
     hmc_samples = {k: v.detach().cpu().numpy() for k, v in samples.items()}
@@ -99,10 +114,13 @@ def mcmc_samples_to_pandas(samples):
     # print(names)
     for key,val in samples.items():
 
+        if val.dim() == 1:
+            val = val.reshape(val.size(dim=0), 1)
         # print(key)
         # print("\nval shape = ", val.shape)
         if 'node' in key:
             name = key.split('node')
+
             for idx in itertools.product(*map(range, val.shape[1:])): # first dimension is samples
                 idx_str = "[{}]".format(",".join(map(str, idx)))
                 new_name = 'node' + name[-1] + idx_str
@@ -113,7 +131,8 @@ def mcmc_samples_to_pandas(samples):
                 elif len(idx) == 2:
                     v = val[:, idx[0], idx[1]]
                 else:
-                    print("not sure why dimension is larger than 2")
+                    print("not sure whynode  dimension is larger than 2")
+                    # print("val shape = ", val.shape)
                     exit(1)
                 # print("vv = ", v.shape)
                 new_dict[new_name] = v.detach().numpy()
@@ -151,7 +170,8 @@ if __name__ == "__main__":
     graph, roots = net.make_graph_2()
 
 
-    model = MFNetProbModel(graph, roots, noise_var=1e-4)
+    # model = MFNetProbModel(graph, roots, noise_var=1e-4)
+    model = MFNetProbModel(graph, roots, noise_var=1e-2)    
 
 
     x = torch.linspace(-1,1,10).reshape(10, 1)
@@ -167,28 +187,61 @@ if __name__ == "__main__":
         plt.plot(x, evals[1].flatten(), color='red', alpha=0.2)
     # plt.show()
     # exit(1)
-    
-    num_samples = 1000
-    num_chains = 1
-    warmup_steps = 50
-    nuts_kernel = NUTS(model, jit_compile=False)
-    mcmc = MCMC(
-        nuts_kernel,
-        num_samples=num_samples,
-        warmup_steps=warmup_steps,
-        num_chains=num_chains,
-    )
 
+    # data
     data1 = x
     data2 = 2*x**2 + x
     data = [data1.flatten(), data2.flatten()]
-    mcmc.run([x]*num_models, targets, data)
-    # mcmc.summary(prob=0.5)
 
+    # algorithms
+    num_samples = 10000
+    num_chains = 1
+    warmup_steps = 50    
+    adam_params = {"lr": 0.005, "betas": (0.95, 0.999)}
+    num_steps = 10000
+    
+    # testing
     xtest = torch.linspace(-1,1,100).reshape(100,1)
-    predictive = Predictive(model,  mcmc.get_samples())# , return_sites=("obs1", "_RETURN"))
-    vals = predictive([xtest]*num_models, targets)
 
+
+    
+    optimizer = Adam(adam_params)
+    # guide = AutoNormal(model)
+    # guide = AutoMultivariateNormal(model)
+    guide = AutoIAFNormal(model, hidden_dim=[100], num_transforms=4)
+    svi = SVI(model, guide, optimizer, loss=Trace_ELBO())
+
+    #do gradient steps
+    for step in range(num_steps):
+        elbo = svi.step([x]*num_models, targets, data)
+        if step % 100 == 0:
+            print(f"Iteration {step}\t Elbo loss: {elbo}")
+
+    predictive = Predictive(model, guide=guide, num_samples=num_samples)
+    pred = predictive([xtest]*num_models, targets)
+    param_samples = {k: v.reshape(num_samples) for k,v in pred.items() if k[:3] != "obs"}
+    vals = {k: v for k,v in pred.items() if k[:3] == "obs"}
+    # print("svi_samples = ", list(param_samples.keys()))
+    # print(param_samples)
+    # exit(1)
+
+    run_mcmc = False
+    if run_mcmc == True:
+
+        nuts_kernel = NUTS(model, jit_compile=False)
+        mcmc = MCMC(
+            nuts_kernel,
+            num_samples=num_samples,
+            warmup_steps=warmup_steps,
+            num_chains=num_chains,
+        )
+        mcmc.run([x]*num_models, targets, data)
+        param_samples = mcmc.get_samples()        
+        predictive = Predictive(model,  mcmc.get_samples())# , return_sites=("obs1", "_RETURN"))
+        vals = predictive([xtest]*num_models, targets)
+        
+
+    
     plt.figure()    
     for ii in range(num_samples):
         # plt.plot(xtest.flatten(), predictive['_RETURN'][ii, :], '-r', alpha=0.2)
@@ -198,13 +251,12 @@ if __name__ == "__main__":
     plt.plot(x, data2, 'mo')
 
 
-    df = mcmc_samples_to_pandas(mcmc.get_samples())
+    df = samples_to_pandas(param_samples)
     plt.figure()
     plt.plot(df.iloc[:, 0])
     plt.plot(df.iloc[:, 1])
-    
 
-    
+
     pd.plotting.scatter_matrix(df, alpha=0.2, figsize=(6,6), diagonal='kde')
 
-    plt.show()    
+plt.show()    
