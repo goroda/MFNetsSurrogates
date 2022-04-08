@@ -8,8 +8,18 @@ import numpy as np
 import net_torch as net
 import net_pyro
 
-from pyro.infer import MCMC, NUTS
-from pyro.infer import Predictive
+from pyro.infer import MCMC, NUTS, Predictive, SVI, Trace_ELBO
+from pyro.optim import Adam
+from pyro.infer.autoguide import (
+    # AutoDelta,
+    AutoNormal,
+    AutoMultivariateNormal,
+    # AutoLowRankMultivariateNormal,
+    # AutoGuideList,
+    AutoIAFNormal,
+    # init_to_feasible,
+)
+
 
 import pandas as pd
 
@@ -123,13 +133,26 @@ if __name__ == "__main__":
                         help='noise variance')
 
     parser.add_argument("--pyro_alg", metavar="pyro_alg", type=str, nargs=1,
-                        help='mcmc or xxx')
+                        help='mcmc, svi-normal, svi-multinormal, svi-iafflow',
+                        default='mcmc')
 
-    parser.add_argument("--num_samples", metavar="num_samples", type=int, nargs=1,
+    parser.add_argument("--iaf_depth", metavar="iaf_depth", type=int,
+                        help='number of autoregressive transforms',                        
+                        default=4)
+    
+    parser.add_argument("--iaf_hidden_dim", metavar="iaf_hidden_dim", type=int, nargs='+',
+                        help='number of autoregressive transforms',                        
+                        default=[100])        
+    
+    parser.add_argument("--num_samples", metavar="num_samples", type=int,
                         default=1000,
                         help='Number of MCMC samples')
 
-    parser.add_argument("--burnin", metavar="type", type=int, nargs=1,
+    parser.add_argument("--num_steps", metavar="num_steps", type=int, nargs=1,
+                        default=10000,
+                        help='Number of SVI steps')    
+
+    parser.add_argument("--burnin", metavar="burnin", type=int,
                         default=100,
                         help='Burnin')    
 
@@ -179,37 +202,89 @@ if __name__ == "__main__":
         model = net_pyro.MFNetProbModel(graph, roots, noise_var=noise_var)
 
         alg = args.pyro_alg[0]
-        num_samples = args.num_samples[0]
+
+        ## Algorithm parameters
+        num_samples = args.num_samples
+        print(num_samples)
+
+        # MCMC
+        num_chains = 1
+        warmup = args.burnin
+
+        # SVI
+        adam_params = {"lr": 0.005, "betas": (0.95, 0.999)}
+        num_steps = args.num_steps
         
-        if alg == 'mcmc':
-            warmup = args.burnin[0]
-            num_chains = 1
-            nuts_kernel = NUTS(model, jit_compile=False)
+        ## Data setup
+        X = [d.x for d in datasets]
+        Y = [d.y for d in datasets]
+        
+        if alg[:3] == 'svi':
+
+            optimizer = Adam(adam_params)
+            if alg == 'svi-normal':
+                guide = AutoNormal(model)
+            elif alg == 'svi-multinormal':
+                guide = AutoMultivariateNormal(model)
+            elif alg == 'svi-iafflow':
+                hidden_dim = args.iaf_hidden_dim # list
+                num_transforms = args.iaf_depth
+                guide = AutoIAFNormal(model,
+                                      hidden_dim=hidden_dim,
+                                      num_transforms=num_transforms)
+            else:
+                print(f"Algorithm \'{alg}\' is not recognized")
+                exit(1)
+                
+            svi = SVI(model, guide, optimizer, loss=Trace_ELBO())
+
+            #do gradient steps
+            for step in range(num_steps):
+                elbo = svi.step(X, target_nodes, Y)
+                if step % 100 == 0:
+                    print(f"Iteration {step}\t Elbo loss: {elbo}")
+
+            predictive = Predictive(model, guide=guide, num_samples=num_samples)
+            pred = predictive([eval_locs]*num_nodes, target_nodes)
+            param_samples = {k: v.reshape(num_samples) 
+                             for k,v in pred.items() if k[:3] != "obs"}
+            vals = {k: v for k,v in pred.items() if k[:3] == "obs"}
+
+        elif alg == 'mcmc':
+
+            nuts_kernel = NUTS(model, jit_compile=False, full_mass=True)
             mcmc = MCMC(
                 nuts_kernel,
                 num_samples=num_samples,
                 warmup_steps=warmup,
                 num_chains=num_chains,
             )
-
-            X = [d.x for d in datasets]
-            Y = [d.y for d in datasets]
             print("\n")
             mcmc.run(X, target_nodes, Y)
             print("\n")
 
+            param_samples = mcmc.get_samples()
             predictive = Predictive(model,  mcmc.get_samples())
             vals = predictive([eval_locs]*num_nodes, target_nodes)
 
-            for ii, node in enumerate(target_nodes):
-                v = vals[f"obs{node}"].T # x by num_samples
-                fname = f"{save_evals_filename}_model{node}"
-                print(f"Saving outputs of Node {node} to: ", fname)
-                np.savetxt(fname, v)
-                
-            df = net_pyro.samples_to_pandas(mcmc.get_samples())
-            
-            sample_filename = f"{save_evals_filename}_param_samples.csv"
-            print("Saving samples to ", sample_filename)
-            df.to_csv(sample_filename)
+        else:
+            print(f"Algorithm \'{alg}\' is not recognized")
+            exit(1)
+
+        for ii, node in enumerate(target_nodes):
+            v = vals[f"obs{node}"].T # x by num_samples
+            fname = f"{save_evals_filename}_model{node}"
+            print(f"Saving outputs of Node {node} to: ", fname)
+            np.savetxt(fname, v)
+
+        df = net_pyro.samples_to_pandas(param_samples)
+
+        print(df.describe())
+
+        sample_filename = f"{save_evals_filename}_param_samples.csv"
+        print("Saving samples to ", sample_filename)
+        df.to_csv(sample_filename, index=False)
+
+        # df = pd.read_csv(sample_filename)
+        # print(df.describe())
             

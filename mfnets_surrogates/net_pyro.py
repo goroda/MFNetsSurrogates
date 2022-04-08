@@ -194,9 +194,11 @@ if __name__ == "__main__":
     data = [data1.flatten(), data2.flatten()]
 
     # algorithms
+    # num_samples = 10000
     num_samples = 10000
     num_chains = 1
-    warmup_steps = 50    
+    # warmup_steps = 1000
+    warmup_steps = 1000
     adam_params = {"lr": 0.005, "betas": (0.95, 0.999)}
     num_steps = 10000
     
@@ -204,31 +206,33 @@ if __name__ == "__main__":
     xtest = torch.linspace(-1,1,100).reshape(100,1)
 
 
+    run_svi = False
+    run_mcmc = True
     
-    optimizer = Adam(adam_params)
-    # guide = AutoNormal(model)
-    # guide = AutoMultivariateNormal(model)
-    guide = AutoIAFNormal(model, hidden_dim=[100], num_transforms=4)
-    svi = SVI(model, guide, optimizer, loss=Trace_ELBO())
+    if run_svi == True:
+        optimizer = Adam(adam_params)
+        # guide = AutoNormal(model)
+        # guide = AutoMultivariateNormal(model)
+        guide = AutoIAFNormal(model, hidden_dim=[100], num_transforms=4)
+        svi = SVI(model, guide, optimizer, loss=Trace_ELBO())
 
-    #do gradient steps
-    for step in range(num_steps):
-        elbo = svi.step([x]*num_models, targets, data)
-        if step % 100 == 0:
-            print(f"Iteration {step}\t Elbo loss: {elbo}")
+        #do gradient steps
+        for step in range(num_steps):
+            elbo = svi.step([x]*num_models, targets, data)
+            if step % 100 == 0:
+                print(f"Iteration {step}\t Elbo loss: {elbo}")
 
-    predictive = Predictive(model, guide=guide, num_samples=num_samples)
-    pred = predictive([xtest]*num_models, targets)
-    param_samples = {k: v.reshape(num_samples) for k,v in pred.items() if k[:3] != "obs"}
-    vals = {k: v for k,v in pred.items() if k[:3] == "obs"}
+        predictive = Predictive(model, guide=guide, num_samples=num_samples)
+        pred = predictive([xtest]*num_models, targets)
+        param_samples = {k: v.reshape(num_samples) for k,v in pred.items() if k[:3] != "obs"}
+        vals = {k: v for k,v in pred.items() if k[:3] == "obs"}
     # print("svi_samples = ", list(param_samples.keys()))
     # print(param_samples)
     # exit(1)
 
-    run_mcmc = False
     if run_mcmc == True:
 
-        nuts_kernel = NUTS(model, jit_compile=False)
+        nuts_kernel = NUTS(model, jit_compile=False, full_mass=True)
         mcmc = MCMC(
             nuts_kernel,
             num_samples=num_samples,
@@ -240,7 +244,6 @@ if __name__ == "__main__":
         predictive = Predictive(model,  mcmc.get_samples())# , return_sites=("obs1", "_RETURN"))
         vals = predictive([xtest]*num_models, targets)
         
-
     
     plt.figure()    
     for ii in range(num_samples):
