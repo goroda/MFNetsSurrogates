@@ -6,6 +6,13 @@ import torch
 import numpy as np
 
 import net_torch as net
+import net_pyro
+
+from pyro.infer import MCMC, NUTS
+from pyro.infer import Predictive
+
+import pandas as pd
+
 
 def fill_graph(graph, dim_in):
     """Assign node and edge functions."""
@@ -95,14 +102,36 @@ if __name__ == "__main__":
         description="Perform MFNETS",
     )
 
-    parser.add_argument("--data", metavar="FILE", type=str, nargs='+',
+    parser.add_argument("--data", metavar="FILE", type=str, nargs='+', required=True,
                         help='files containing data ordered from lowest fidelity to highest')
 
-    parser.add_argument("--graph", metavar="Graph", type=str, nargs=1,
+    parser.add_argument("--graph", metavar="Graph", type=str, nargs=1, required=True,
                         help='description of a graph as a list of edges')
 
-    parser.add_argument("--eval_locs", metavar="file", type=str, nargs=1,
+    parser.add_argument("--eval_locs", metavar="file", type=str, nargs=1, required=True,
                         help='A list of locations at which to evaluate the trained model')
+
+    parser.add_argument("-o", metavar="output", type=str, nargs=1, required=True,
+                        help='output file name')
+
+
+    parser.add_argument("--type", metavar="type", type=str, nargs=1, required=True,
+                        help='running type pytorch or pyro')
+
+
+    parser.add_argument("--noisevar", metavar="noisevar", type=float, nargs=1,
+                        help='noise variance')
+
+    parser.add_argument("--pyro_alg", metavar="pyro_alg", type=str, nargs=1,
+                        help='mcmc or xxx')
+
+    parser.add_argument("--num_samples", metavar="num_samples", type=int, nargs=1,
+                        default=1000,
+                        help='Number of MCMC samples')
+
+    parser.add_argument("--burnin", metavar="type", type=int, nargs=1,
+                        default=100,
+                        help='Burnin')    
 
     #########################
     ## Parse Arguments
@@ -118,26 +147,69 @@ if __name__ == "__main__":
 
     eval_locs = parse_evaluation_locations(args, dim_in)
 
-    #################
-    ## Pytorch
+    save_evals_filename = args.o[0]
 
-    model = net.MFNetTorch(graph, roots)
+    run_type = args.type[0]
     
-    ## Training Setup
-    loss_fns = net.construct_loss_funcs(model)
-    data_loaders = datasets_to_dataloaders(datasets)
 
-    ## Train
-    model.train(data_loaders, target_nodes, loss_fns)
+    if run_type == "pytorch":
+        #################
+        ## Pytorch
+        model = net.MFNetTorch(graph, roots)
 
-    ## Evaluate and save to file
-    with torch.no_grad():
-        vals = model([eval_locs]*num_nodes, target_nodes)
-    vals = np.hstack([v.detach().numpy() for v in vals])
-    save_filename = f"{args.eval_locs[0]}_output"
-    print("Saving to: ", save_filename)
-    np.savetxt(save_filename, vals)
+        ## Training Setup
+        loss_fns = net.construct_loss_funcs(model)
+        data_loaders = datasets_to_dataloaders(datasets)
 
-    
-    
-                        
+        ## Train
+        model.train(data_loaders, target_nodes, loss_fns)
+
+        ## Evaluate and save to file
+        with torch.no_grad():
+            vals = model([eval_locs]*num_nodes, target_nodes)
+        vals = np.hstack([v.detach().numpy() for v in vals])
+        print(vals.shape)
+
+        print("Saving to: ", save_evals_filename)
+        np.savetxt(save_evals_filename, vals)
+
+    elif run_type == "pyro":
+
+        noise_var = args.noisevar[0]
+        model = net_pyro.MFNetProbModel(graph, roots, noise_var=noise_var)
+
+        alg = args.pyro_alg[0]
+        num_samples = args.num_samples[0]
+        
+        if alg == 'mcmc':
+            warmup = args.burnin[0]
+            num_chains = 1
+            nuts_kernel = NUTS(model, jit_compile=False)
+            mcmc = MCMC(
+                nuts_kernel,
+                num_samples=num_samples,
+                warmup_steps=warmup,
+                num_chains=num_chains,
+            )
+
+            X = [d.x for d in datasets]
+            Y = [d.y for d in datasets]
+            print("\n")
+            mcmc.run(X, target_nodes, Y)
+            print("\n")
+
+            predictive = Predictive(model,  mcmc.get_samples())
+            vals = predictive([eval_locs]*num_nodes, target_nodes)
+
+            for ii, node in enumerate(target_nodes):
+                v = vals[f"obs{node}"].T # x by num_samples
+                fname = f"{save_evals_filename}_model{node}"
+                print(f"Saving outputs of Node {node} to: ", fname)
+                np.savetxt(fname, v)
+                
+            df = net_pyro.mcmc_samples_to_pandas(mcmc.get_samples())
+            
+            sample_filename = f"{save_evals_filename}_param_samples.csv"
+            print("Saving samples to ", sample_filename)
+            df.to_csv(sample_filename)
+            
