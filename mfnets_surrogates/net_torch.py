@@ -77,15 +77,6 @@ class MFNetTorch(nn.Module):
         for from_n, to_n, f in self.graph.edges.data('func'):
             self.modules_list.add_module(f'edge{from_n}->{to_n}', f)            
             
-        # self.modules_list = nn.ModuleList(
-        #     [(f'node{ii}', f) for ii, (_, f) in enumerate(self.graph.nodes.data('func'))])
-
-        # self.modules_list.extend([f for _,_,f in self.graph.edges.data('func')])
-
-    # def set_target_node(self, target_node):
-    #     """Set the target node for learning."""
-    #     self.target_node = target_node
-
     def zero_attributes(self):
         """Zero all attributes except 'func' and 'param'."""
         atts = ['eval', 'parents_left']
@@ -193,16 +184,6 @@ class MFNetTorch(nn.Module):
 
         return loss
     
-        # for target, dat, loss_fn in zip(targets, data, loss_fns):
-        #     self.set_target_node(target)
-        #     self.zero_attributes()        
-        #     for batch, (X, y) in enumerate(dat):
-        #         with torch.nn.utils.parametrize.cached():
-        #             pred = self(X).flatten()
-        #         new_loss = loss_fn(pred, y)
-        #         loss += new_loss
-            
-        # return loss
 
     def train(self, data, targets, loss_fns):
         """Train the model."""

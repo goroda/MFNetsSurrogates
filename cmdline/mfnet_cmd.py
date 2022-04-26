@@ -1,9 +1,12 @@
 """Command Line Utility for MFNETS."""
+import sys
+sys.path.append("../mfnets_surrogates")
 
 import argparse
 import networkx as nx
 import torch
 import numpy as np
+import matplotlib.pyplot as plt
 
 import net_torch as net
 import net_pyro
@@ -22,6 +25,9 @@ from pyro.infer.autoguide import (
 
 
 import pandas as pd
+
+import logging
+logging.basicConfig(level=logging.INFO)
 
 
 def fill_graph(graph, dim_in):
@@ -51,14 +57,14 @@ def parse_graph(args, dim_in):
 
     roots = set([x for x in graph.nodes() if graph.in_degree(x) == 0])
 
-    print(f"Root models: {roots}")
+    logging.info(f"Root models: {roots}")
     
     return graph, roots
 
 def parse_data(args):
     """Parse data files."""
     num_models = len(args.data)
-    print(f"Number of models: {num_models}")
+    logging.info(f"Number of models: {num_models}")
 
     datasets = []
     dim_in = None
@@ -84,12 +90,19 @@ def parse_data(args):
 
 def parse_evaluation_locations(args, dim_in):
     """Parse eval_locatiosn."""
+
+    if args.eval_locs == None:
+        return None
+    elif len(args.eval_locs) == 0:
+        return None
+    
     assert len(args.eval_locs) == 1, "only one evaluation location file allowed"
+    
 
     try:
         data = np.loadtxt(args.eval_locs[0])
     except FileNotFoundError:
-        print(f"Cannot open file {args.eval_locs[0]}")
+        logging.error(f"Cannot open file {args.eval_locs[0]}")
         exit(1)
 
     if data.ndim == 1:
@@ -118,7 +131,7 @@ if __name__ == "__main__":
     parser.add_argument("--graph", metavar="Graph", type=str, nargs=1, required=True,
                         help='description of a graph as a list of edges')
 
-    parser.add_argument("--eval_locs", metavar="file", type=str, nargs=1, required=True,
+    parser.add_argument("--eval_locs", metavar="file", type=str, nargs=1, required=False,
                         help='A list of locations at which to evaluate the trained model')
 
     parser.add_argument("-o", metavar="output", type=str, nargs=1, required=True,
@@ -142,13 +155,13 @@ if __name__ == "__main__":
     
     parser.add_argument("--iaf_hidden_dim", metavar="iaf_hidden_dim", type=int, nargs='+',
                         help='number of autoregressive transforms',                        
-                        default=[100])        
+                        default=[40])        
     
     parser.add_argument("--num_samples", metavar="num_samples", type=int,
                         default=1000,
                         help='Number of MCMC samples')
 
-    parser.add_argument("--num_steps", metavar="num_steps", type=int, nargs=1,
+    parser.add_argument("--num_steps", metavar="num_steps", type=int,
                         default=10000,
                         help='Number of SVI steps')    
 
@@ -160,13 +173,12 @@ if __name__ == "__main__":
     ## Parse Arguments
     args = parser.parse_args()
     
-    print("\n\n")
     datasets, dim_in = parse_data(args)
     graph, roots = parse_graph(args, dim_in)
 
     target_nodes = list(graph.nodes)
     num_nodes = len(target_nodes)
-    print("Node names: ", target_nodes)
+    logging.info(f"Node names: {target_nodes}")
 
     eval_locs = parse_evaluation_locations(args, dim_in)
 
@@ -188,13 +200,14 @@ if __name__ == "__main__":
         model.train(data_loaders, target_nodes, loss_fns)
 
         ## Evaluate and save to file
-        with torch.no_grad():
-            vals = model([eval_locs]*num_nodes, target_nodes)
-        vals = np.hstack([v.detach().numpy() for v in vals])
-        print(vals.shape)
+        if eval_locs != None:
+            with torch.no_grad():
+                vals = model([eval_locs]*num_nodes, target_nodes)
+            vals = np.hstack([v.detach().numpy() for v in vals])
+            logging.info(vals.shape)
 
-        print("Saving to: ", save_evals_filename)
-        np.savetxt(save_evals_filename, vals)
+            logging.info("Saving to: ", save_evals_filename)
+            np.savetxt(save_evals_filename, vals)
 
     elif run_type == "pyro":
 
@@ -205,7 +218,7 @@ if __name__ == "__main__":
 
         ## Algorithm parameters
         num_samples = args.num_samples
-        print(num_samples)
+        logging.info(f"Number of samples = {num_samples}")
 
         # MCMC
         num_chains = 1
@@ -214,6 +227,7 @@ if __name__ == "__main__":
         # SVI
         adam_params = {"lr": 0.005, "betas": (0.95, 0.999)}
         num_steps = args.num_steps
+
         
         ## Data setup
         X = [d.x for d in datasets]
@@ -233,22 +247,28 @@ if __name__ == "__main__":
                                       hidden_dim=hidden_dim,
                                       num_transforms=num_transforms)
             else:
-                print(f"Algorithm \'{alg}\' is not recognized")
+                logging.info(f"Algorithm \'{alg}\' is not recognized")
                 exit(1)
                 
             svi = SVI(model, guide, optimizer, loss=Trace_ELBO())
 
+            logging.info(f"Number of steps = {num_steps}")
             #do gradient steps
             for step in range(num_steps):
                 elbo = svi.step(X, target_nodes, Y)
                 if step % 100 == 0:
-                    print(f"Iteration {step}\t Elbo loss: {elbo}")
+                    logging.info(f"Iteration {step}\t Elbo loss: {elbo}")
 
             predictive = Predictive(model, guide=guide, num_samples=num_samples)
-            pred = predictive([eval_locs]*num_nodes, target_nodes)
+            if eval_locs != None:
+                pred = predictive([eval_locs]*num_nodes, target_nodes)
+            else: # just predict on training points
+                pred = predictive(X, target_nodes) 
+
             param_samples = {k: v.reshape(num_samples) 
                              for k,v in pred.items() if k[:3] != "obs"}
-            vals = {k: v for k,v in pred.items() if k[:3] == "obs"}
+            vals = {k: v for k,v in pred.items() if k[:3] == "obs"}                
+        
 
         elif alg == 'mcmc':
 
@@ -264,25 +284,44 @@ if __name__ == "__main__":
             print("\n")
 
             param_samples = mcmc.get_samples()
-            predictive = Predictive(model,  mcmc.get_samples())
-            vals = predictive([eval_locs]*num_nodes, target_nodes)
+
+            predictive = Predictive(model,  mcmc.get_samples())            
+            if eval_locs != None:
+                vals = predictive([eval_locs]*num_nodes, target_nodes)
+            else: # predict on training points
+                vals = predictive(X, target_nodes)
 
         else:
-            print(f"Algorithm \'{alg}\' is not recognized")
+            logging.info(f"Algorithm \'{alg}\' is not recognized")
             exit(1)
 
         for ii, node in enumerate(target_nodes):
             v = vals[f"obs{node}"].T # x by num_samples
             fname = f"{save_evals_filename}_model{node}"
-            print(f"Saving outputs of Node {node} to: ", fname)
+            logging.info(f"Saving outputs of Node {node} to: {fname}")
             np.savetxt(fname, v)
 
+
+        fig, axs = plt.subplots(3,1, sharex=True)
+        axs[0].plot(eval_locs, vals["obs1"].transpose(0,1), '-r', alpha=0.2)
+        axs[0].plot(X[0], Y[0], 'ko')
+
+        axs[1].plot(eval_locs, vals["obs2"].transpose(0,1), '-r', alpha=0.2)
+        axs[1].plot(X[1], Y[1], 'ko')
+
+        axs[2].plot(eval_locs, vals["obs3"].transpose(0,1), '-r', alpha=0.2)
+        axs[2].plot(X[2], Y[2], 'ko')
+
+        pred_filename = f"{save_evals_filename}_predict.pdf"
+        plt.savefig(pred_filename)
+        plt.show()
+        
         df = net_pyro.samples_to_pandas(param_samples)
 
-        print(df.describe())
+        logging.info(df.describe())
 
         sample_filename = f"{save_evals_filename}_param_samples.csv"
-        print("Saving samples to ", sample_filename)
+        logging.info(f"Saving samples to {sample_filename}")
         df.to_csv(sample_filename, index=False)
 
         # df = pd.read_csv(sample_filename)

@@ -106,7 +106,7 @@ class MFNetProbModel(pyro.nn.PyroModule):
         return [m.flatten() for m in means]
 
 def samples_to_pandas(samples):
-    """Convert the samples of parameters to a pandas dataframe."""
+    """Convert the samples output of Pyro parameters to a pandas dataframe."""
     
     hmc_samples = {k: v.detach().cpu().numpy() for k, v in samples.items()}
     names = list(hmc_samples.keys())
@@ -114,6 +114,8 @@ def samples_to_pandas(samples):
     # print(names)
     for key,val in samples.items():
 
+        val = val.squeeze()
+        
         if val.dim() == 1:
             val = val.reshape(val.size(dim=0), 1)
         # print(key)
@@ -206,8 +208,8 @@ if __name__ == "__main__":
     xtest = torch.linspace(-1,1,100).reshape(100,1)
 
 
-    run_svi = False
-    run_mcmc = True
+    run_svi = True
+    run_mcmc = False
     
     if run_svi == True:
         optimizer = Adam(adam_params)
