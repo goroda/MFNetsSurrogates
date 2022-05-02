@@ -1,6 +1,7 @@
 """Command Line Utility for MFNETS."""
 import sys
-sys.path.append("../mfnets_surrogates")
+# sys.path.append("../mfnets_surrogates")
+sys.path.append("/Users/alex/Software/mfnets_surrogate/mfnets_surrogates")
 
 import argparse
 import networkx as nx
@@ -87,9 +88,8 @@ def parse_data(args):
     
     return datasets, dim_in
 
-
 def parse_evaluation_locations(args, dim_in):
-    """Parse eval_locatiosn."""
+    """Parse eval_locations."""
 
     if args.eval_locs == None:
         return None
@@ -137,10 +137,8 @@ if __name__ == "__main__":
     parser.add_argument("-o", metavar="output", type=str, nargs=1, required=True,
                         help='output file name')
 
-
     parser.add_argument("--type", metavar="type", type=str, nargs=1, required=True,
                         help='running type pytorch or pyro')
-
 
     parser.add_argument("--noisevar", metavar="noisevar", type=float, nargs=1,
                         help='noise variance')
@@ -172,7 +170,7 @@ if __name__ == "__main__":
     #########################
     ## Parse Arguments
     args = parser.parse_args()
-    
+
     datasets, dim_in = parse_data(args)
     graph, roots = parse_graph(args, dim_in)
 
@@ -206,7 +204,7 @@ if __name__ == "__main__":
             vals = np.hstack([v.detach().numpy() for v in vals])
             logging.info(vals.shape)
 
-            logging.info("Saving to: ", save_evals_filename)
+            logging.info(f"Saving to: {save_evals_filename}")
             np.savetxt(save_evals_filename, vals)
 
     elif run_type == "pyro":
@@ -261,12 +259,16 @@ if __name__ == "__main__":
 
             predictive = Predictive(model, guide=guide, num_samples=num_samples)
             if eval_locs != None:
+                # print(eval_locs.shape)
                 pred = predictive([eval_locs]*num_nodes, target_nodes)
+                # print(list(pred.keys()))
             else: # just predict on training points
                 pred = predictive(X, target_nodes) 
 
-            param_samples = {k: v.reshape(num_samples) 
-                             for k,v in pred.items() if k[:3] != "obs"}
+            # param_samples = [print(k, v.squeeze().shape)
+            #                  for k,v in pred.items() if k[:3] != "obs"]
+
+            param_samples = {k: v.squeeze() for k,v in pred.items() if k[:3] != "obs"}
             vals = {k: v for k,v in pred.items() if k[:3] == "obs"}                
         
 
@@ -302,19 +304,20 @@ if __name__ == "__main__":
             np.savetxt(fname, v)
 
 
-        fig, axs = plt.subplots(3,1, sharex=True)
-        axs[0].plot(eval_locs, vals["obs1"].transpose(0,1), '-r', alpha=0.2)
-        axs[0].plot(X[0], Y[0], 'ko')
 
-        axs[1].plot(eval_locs, vals["obs2"].transpose(0,1), '-r', alpha=0.2)
-        axs[1].plot(X[1], Y[1], 'ko')
+        # fig, axs = plt.subplots(3,1, sharex=True)
+        # axs[0].plot(eval_locs, vals["obs1"].transpose(0,1), '-r', alpha=0.2)
+        # axs[0].plot(X[0], Y[0], 'ko')
 
-        axs[2].plot(eval_locs, vals["obs3"].transpose(0,1), '-r', alpha=0.2)
-        axs[2].plot(X[2], Y[2], 'ko')
+        # axs[1].plot(eval_locs, vals["obs2"].transpose(0,1), '-r', alpha=0.2)
+        # axs[1].plot(X[1], Y[1], 'ko')
 
-        pred_filename = f"{save_evals_filename}_predict.pdf"
-        plt.savefig(pred_filename)
-        plt.show()
+        # axs[2].plot(eval_locs, vals["obs3"].transpose(0,1), '-r', alpha=0.2)
+        # axs[2].plot(X[2], Y[2], 'ko')
+
+        # pred_filename = f"{save_evals_filename}_predict.pdf"
+        # plt.savefig(pred_filename)
+        # plt.show()
         
         df = net_pyro.samples_to_pandas(param_samples)
 
