@@ -27,7 +27,7 @@ class ArrayDataset(torch.utils.data.Dataset):
     def __getitem__(self, key):
         """Get a row."""
         assert isinstance(key, int)
-        return self.x[key, :], self.y[key]
+        return self.x[key, :], self.y[key, :]
 
     def __len__(self):
         """Get number of data points."""
@@ -97,7 +97,7 @@ class MFNetTorch(nn.Module):
 
         Parameters
         ----------
-        xinput :  np.ndarray (nsamples,nparams)
+        xinput :  np.ndarray (nsamples, ndim)
             The independent variables of the model at which to evaluate target node
 
         target_node : integer
@@ -126,6 +126,7 @@ class MFNetTorch(nn.Module):
         queue = SimpleQueue()
         for node in anc_and_target:
             pval = self.graph.nodes[node]['func'](xinput)
+
             self.graph.nodes[node]['eval'] = pval
             self.graph.nodes[node]['parents_left'] = set(self.graph.predecessors(node))
 
@@ -139,7 +140,20 @@ class MFNetTorch(nn.Module):
                 if child in anc_and_target:
                     pval = self.graph.edges[node, child]['func'](xinput)
 
-                    self.graph.nodes[child]['eval'] += feval * pval
+                    # print("pval shape", pval.shape)
+                    
+                    pval = pval.reshape(pval.size(dim=0),
+                                        self.graph.edges[node, child]['out_rows'],
+                                        self.graph.edges[node, child]['out_cols'])
+
+
+                    rho_f = torch.einsum("ijk,ik->ij", pval, feval)
+                    # self.graph.nodes[child]['eval'] += feval * pval
+                    # print("pval shape = 
+                    self.graph.nodes[child]['eval'] += rho_f
+
+                    # print("child shape = ", self.graph.nodes[child]['eval'].shape)
+                    
                     self.graph.edges[node, child]['eval'] = pval
 
                     self.graph.nodes[child]['parents_left'].remove(node)
