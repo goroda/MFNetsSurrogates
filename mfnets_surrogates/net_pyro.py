@@ -94,20 +94,49 @@ class MFNetProbModel(pyro.nn.PyroModule):
         
     def forward(self, x, targets, y=None):
         """Evaluate model."""
+        # print("x = ", x)
         means = self.model(x, targets)
+        # print("god means = ", means)
         if y == None:
+            # print("SHOULD NOT BE HERE YET")
+            # exit(1)
             for ii, (m, xx) in enumerate(zip(means, x)):
-                with pyro.plate(f"data{ii+1}", xx.shape[0]):
-                    obs = pyro.sample(f"obs{ii+1}", dist.Normal(m.flatten(), self.sigma), obs=None)
-        else:
+                # print("m = ", m.size())
+                # print("xx size = ", xx.size())                
+                # with pyro.plate(f"data{ii+1}", xx.shape[0]):
+                #     obs = pyro.sample(f"obs{ii+1}", dist.Normal(m.flatten(), self.sigma), obs=None)
+                for jj in range(m.size(dim=1)):
+                    obs = pyro.sample(f"obs{targets[ii]}-{jj}",
+                                      dist.MultivariateNormal(m[:, jj],
+                                                              self.sigma * torch.eye(m.size(dim=0))), obs=None)
+                    # for kk in range(m.size(dim=1)):
+                    #     obs = pyro.sample(f"obs{ii+1}-{jj}-{kk}",
+                    #                       dist.Normal(m[jj, kk], self.sigma), obs=None)
+        else:            
             for ii, (m, xx, yy) in enumerate(zip(means, x, y)):
-                with pyro.plate(f"data{ii+1}", xx.shape[0]):
-                    obs = pyro.sample(f"obs{ii+1}", dist.Normal(m.flatten(), self.sigma), obs=yy)
-        return [m.flatten() for m in means]
+                # print("m = ", m.size())
+                # print("xx size = ", xx.size())
+                # print("yy size = ", yy.size())
+                for jj in range(yy.size(dim=1)):
+                    obs = pyro.sample(f"obs{ii+1}-{jj}",
+                                      dist.MultivariateNormal(m[:, jj],
+                                                              self.sigma * torch.eye(m.size(dim=0))), obs=yy[:, jj])
+                    # for kk in range(yy.size(dim=1)):
+                    # # print("m = ", m[jj, kk])
+                    # # print("y = ", yy[jj, kk])
+                    # # print("sigma = ", self.sigma)
+                    #     obs = pyro.sample(f"obs{ii+1}-{jj}-{kk}",
+                    #                       dist.Normal(m[jj, kk], self.sigma),
+                    #                       obs=yy[jj, kk])
+                        
+                # with pyro.plate(f"data{ii+1}", xx.shape[0]):
+                #     # obs = pyro.sample(f"obs{ii+1}", dist.Normal(m.flatten(), self.sigma), obs=yy.flatten())
+
+        # print("return?")
+        return [m for m in means]
 
 def samples_to_pandas(samples):
     """Convert the samples output of Pyro parameters to a pandas dataframe."""
-    
     hmc_samples = {k: v.detach().cpu().numpy() for k, v in samples.items()}
     names = list(hmc_samples.keys())
     new_dict = {}

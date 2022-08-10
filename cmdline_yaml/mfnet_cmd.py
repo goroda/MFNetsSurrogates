@@ -114,7 +114,7 @@ def parse_model_info(args):
         dim_in = train_input.shape[1]
         dim_out = train_output.shape[1]
 
-        output_dir = os.path.join(os.getcwd(), model['output_dir'])
+        output_dir = os.path.join(os.getcwd(), input_spec['save_dir'], model['output_dir'])
         
         models[name] = ModelTrainData(train_input, train_output, dim_in, dim_out, output_dir)
         logging.info(f"Model {name}: number of inputs = {dim_in}, number of outputs = {dim_out}, ntrain = {train_output.shape[0]}, output_dir = {output_dir}")
@@ -129,16 +129,30 @@ def parse_evaluation_locations(input_spec):
         name = str(model['name'])
 
         if 'test_output' in model:
-            filename = model['test_output']
-            logging.info(f"Will evaluate model {name} at inputs of file {filename}")
 
-            try: 
-                test_input = pd.read_csv(filename, delim_whitespace=True)
-            except FileNotFoundError:
-                print(f"Cannot open test inputs for model {name} in file {filename}")
-                exit(1)
-                
-            model_evals[name] = test_input
+            filename = model['test_output']
+            logging.info(f"Will evaluate model {name} at inputs of file(s) {filename}")
+
+            if isinstance(filename, list):
+                model_evals[name] = []
+                for fname in filename:
+                    try: 
+                        test_input = pd.read_csv(fname, delim_whitespace=True)
+                    except FileNotFoundError:
+                        print(f"Cannot open test inputs for model {name} in file {fname}")
+                        exit(1)
+                    fname = fname.split(os.path.sep)[-1]
+                    model_evals[name].append((fname, test_input))
+
+            else:
+                try: 
+                    test_input = pd.read_csv(filename, delim_whitespace=True)
+                except FileNotFoundError:
+                    print(f"Cannot open test inputs for model {name} in file {filename}")
+                    exit(1)
+                    
+                fname = filename.split(os.path.sep)[-1]
+                model_evals[name] = [(fname, test_input)]
         else:
             model_evals[name] = None
             
@@ -197,6 +211,9 @@ if __name__ == "__main__":
 
     model_test_inputs = parse_evaluation_locations(input_spec)
 
+    save_dir = input_spec['save_dir']
+    os.makedirs(save_dir, exist_ok=True)
+
     # print(model_info)
     # exit(1)
     #########################
@@ -221,49 +238,48 @@ if __name__ == "__main__":
             if test_pts is not None:
                 logging.info(f"Evaluating model {node} at test points")
 
-                x = torch.Tensor(test_pts.to_numpy())
-                vals = model([x], [node])[0].detach().numpy()
-                results = pd.DataFrame(vals, columns=model_info[node].train_out.columns)
+                for (fname, data) in test_pts:
+                    # print("fname = ", fname)
+                    x = torch.Tensor(data.to_numpy())
+                    vals = model([x], [node])[0].detach().numpy()
+                    results = pd.DataFrame(vals, columns=model_info[node].train_out.columns)
+                    dirname =  model_info[node].output_dir
+                    os.makedirs(dirname, exist_ok=True)
+                    filename = os.path.join(dirname, f"{fname}.evals")
+                    results.to_csv(filename, sep=' ', index=False)
 
-                dirname = model_info[node].output_dir
-                os.makedirs(dirname, exist_ok=True)
-                filename = os.path.join(dirname, "evaluations.dat")
-                results.to_csv(filename, sep=' ', index=False)
+    elif input_spec['inference_type'] == "bayes":
 
-    elif run_type == "pyro":
+        logging.info("Running Bayesian Inference")
+        noise_var = float(input_spec['algorithm']['noise_var'])
 
-        noise_var = args.noisevar[0]
         model = net_pyro.MFNetProbModel(graph, roots, noise_var=noise_var)
 
-        alg = args.pyro_alg[0]
+        alg = input_spec['algorithm']['parameterization']
 
         ## Algorithm parameters
-        num_samples = args.num_samples
-        logging.info(f"Number of samples = {num_samples}")
-
-        # MCMC
-        num_chains = 1
-        warmup = args.burnin
-
-        # SVI
-        adam_params = {"lr": 0.005, "betas": (0.95, 0.999)}
-        num_steps = args.num_steps
-
+        num_samples = input_spec['algorithm']['num_samples']
+        logging.info(f"Number of parameter samples: {num_samples}")
         
         ## Data setup
-        X = [d.x for d in datasets]
-        Y = [d.y for d in datasets]
-        
+        X = [torch.Tensor(model_info[node].train_in.to_numpy()) for node in target_nodes]
+        Y = [torch.Tensor(model_info[node].train_out.to_numpy()) for node in target_nodes]
         if alg[:3] == 'svi':
-
+            # SVI
+            logging.info("Running Stochastic Variational Inference")
+            
+            adam_params = {"lr": 0.005, "betas": (0.95, 0.999)}
+            num_steps = input_spec['algorithm']['num_optimization_steps']
+        
             optimizer = Adam(adam_params)
             if alg == 'svi-normal':
+                logging.info("Approximating with an AutoNormal Guide")
                 guide = AutoNormal(model)
             elif alg == 'svi-multinormal':
                 guide = AutoMultivariateNormal(model)
             elif alg == 'svi-iafflow':
-                hidden_dim = args.iaf_hidden_dim # list
-                num_transforms = args.iaf_depth
+                hidden_dim = input_spec['algorithm']['iaf_params']['hidden_dim']
+                num_transforms = input_spec['algorithm']['iaf_params']['num_transforms']
                 guide = AutoIAFNormal(model,
                                       hidden_dim=hidden_dim,
                                       num_transforms=num_transforms)
@@ -281,22 +297,20 @@ if __name__ == "__main__":
                     logging.info(f"Iteration {step}\t Elbo loss: {elbo}")
 
             predictive = Predictive(model, guide=guide, num_samples=num_samples)
-            if eval_locs != None:
-                # print(eval_locs.shape)
-                pred = predictive([eval_locs]*num_nodes, target_nodes)
-                # print(list(pred.keys()))
-            else: # just predict on training points
-                pred = predictive(X, target_nodes) 
 
-            # param_samples = [print(k, v.squeeze().shape)
-            #                  for k,v in pred.items() if k[:3] != "obs"]
+            # just generate arbitrary input locations, we are just getting samples
+            # of latent space here, this is a hack but unclear how to just sample
+            # from the guide
+            xone = [xx[0:1,:] for xx in X]
+            pred = predictive(xone, target_nodes)
 
-            param_samples = {k: v.squeeze() for k,v in pred.items() if k[:3] != "obs"}
-            vals = {k: v for k,v in pred.items() if k[:3] == "obs"}                
-        
+            param_samples = {k:v for k,v in pred.items() if k[:3] != "obs"}
 
         elif alg == 'mcmc':
-
+            # MCMC
+            num_chains = 1
+            warmup = input_spec['algorithm']['mcmc_params']['burnin']
+            
             nuts_kernel = NUTS(model, jit_compile=False, full_mass=True)
             mcmc = MCMC(
                 nuts_kernel,
@@ -310,22 +324,47 @@ if __name__ == "__main__":
 
             param_samples = mcmc.get_samples()
 
-            predictive = Predictive(model,  mcmc.get_samples())            
-            if eval_locs != None:
-                vals = predictive([eval_locs]*num_nodes, target_nodes)
-            else: # predict on training points
-                vals = predictive(X, target_nodes)
-
         else:
             logging.info(f"Algorithm \'{alg}\' is not recognized")
             exit(1)
 
-        for ii, node in enumerate(target_nodes):
-            v = vals[f"obs{node}"].T # x by num_samples
-            fname = f"{save_evals_filename}_model{node}"
-            logging.info(f"Saving outputs of Node {node} to: {fname}")
-            np.savetxt(fname, v)
 
+        # Save samples
+        # print(param_samples)
+        df = net_pyro.samples_to_pandas(param_samples)
+        # print(df.describe())
+        sample_filename = os.path.join(save_dir, input_spec['algorithm']['sample_output_files'])
+        logging.info(f"Saving samples to {sample_filename}")
+        df.to_csv(sample_filename, sep=' ', index=False)
+
+
+        # Perform predictions
+        predictive = Predictive(model,  param_samples)
+
+        ## Evaluate and save to file
+        for node in graph.nodes:
+            test_pts = model_test_inputs[node]
+            if test_pts is not None:
+                logging.info(f"Evaluating model {node} at test points")
+
+                for (fname, data) in test_pts:
+                    # print("fname = ", fname)
+                    x = torch.Tensor(data.to_numpy())
+                    vals = predictive([x], [node])
+                    # print("values = ")
+                    # print(vals)
+                    for jj, qoi_name in enumerate(model_info[node].train_out.columns):
+                        dirname = model_info[node].output_dir
+                        filename = os.path.join(dirname, f"{fname}.samples_{qoi_name}")
+                        logging.info(f"Saving samples for file {fname} and qoi {qoi_name} to {filename}")
+                        key = f"obs{node}-{jj}"
+                        col_vals = vals[key].detach().numpy() # num_samples x 
+                        col_names = [f"x_{ii}" for ii in range(x.size(dim=0))]
+                        results = pd.DataFrame(col_vals, columns=col_names)
+                        # print(results.describe())
+
+                        os.makedirs(dirname, exist_ok=True)
+                        results.to_csv(filename, sep=' ', index=False)
 
 
         # fig, axs = plt.subplots(3,1, sharex=True)
@@ -341,14 +380,8 @@ if __name__ == "__main__":
         # pred_filename = f"{save_evals_filename}_predict.pdf"
         # plt.savefig(pred_filename)
         # plt.show()
-        
-        df = net_pyro.samples_to_pandas(param_samples)
 
-        logging.info(df.describe())
 
-        sample_filename = f"{save_evals_filename}_param_samples.csv"
-        logging.info(f"Saving samples to {sample_filename}")
-        df.to_csv(sample_filename, index=False)
 
         # df = pd.read_csv(sample_filename)
         # print(df.describe())
