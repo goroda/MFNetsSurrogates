@@ -264,6 +264,10 @@ mfsurr.train(data_loaders, [2, 4], loss_fn_use)
 
 #+END_SRC
 
+The unit test can be run with
+#+BEGIN_SRC unix 
+python -m unittest test_mfnet_torch.py -v
+#+END_SRC
 
 ** Detailed example Pyro 
   The PyTorch example showed how to train a deterministic MFNet that does not account for the uncertainty in the node and edge functions that remains due to insufficient data. For this, we can use the Pyro probabilistic programming language. The setup for the graph is identical to the PyTorch example. However, we now instantiate the model as
@@ -361,6 +365,8 @@ Please cite the following paper if you find this code to be useful
 
 
 
+** TODOS 
+   - Update README with the new interface.
 ** More information
 
  Author: Alex Gorodetsky 
@@ -370,3 +376,4 @@ Please cite the following paper if you find this code to be useful
  Copyright (c) 2020 Alex Gorodetsky  
 
  License: MIT
+

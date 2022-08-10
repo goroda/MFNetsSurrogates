@@ -43,10 +43,10 @@ def make_graph_2():
     # pnodes = torch.randn((2, 2), device=device, dtype=dtype)
     # pedges = torch.randn((1, 2), device=device, dtype=dtype)
 
-    dinput = 1
-    graph.add_node(1, func=torch.nn.Linear(dinput, 1, bias=True))
-    graph.add_node(2, func=torch.nn.Linear(dinput, 1, bias=True))
-    graph.add_edge(1, 2, func=torch.nn.Linear(dinput, 1, bias=True))
+    dim_in = 1
+    graph.add_node(1, func=torch.nn.Linear(dim_in, 1, bias=True), dim_in=1)
+    graph.add_node(2, func=torch.nn.Linear(dim_in, 1, bias=True), dim_out=1)
+    graph.add_edge(1, 2, func=torch.nn.Linear(dim_in, 1, bias=True), out_rows=1, out_cols=1, dim_in=1)
     return graph, set([1])
 
 
@@ -71,11 +71,12 @@ class MFNetTorch(nn.Module):
         self.target_node = None
         self.modules_list = nn.ModuleList()
 
-        for node, f in self.graph.nodes.data('func'):
-            self.modules_list.add_module(f'node{node}', f)
 
-        for from_n, to_n, f in self.graph.edges.data('func'):
-            self.modules_list.add_module(f'edge{from_n}->{to_n}', f)            
+        for node, func in self.graph.nodes.data('func'):
+            self.modules_list.add_module(f"node{node}", func)
+
+        for from_n, to_n, func in self.graph.edges.data('func'):
+            self.modules_list.add_module(f'edge{from_n}->{to_n}', func)            
             
     def zero_attributes(self):
         """Zero all attributes except 'func' and 'param'."""
@@ -127,9 +128,10 @@ class MFNetTorch(nn.Module):
         for node in anc_and_target:
             pval = self.graph.nodes[node]['func'](xinput)
 
+            # print(f"node {node}, pval size = {pval.size()}")
             self.graph.nodes[node]['eval'] = pval
             self.graph.nodes[node]['parents_left'] = set(self.graph.predecessors(node))
-
+            
             if node in relevant_root_nodes:
                 queue.put(node)
 
@@ -140,14 +142,21 @@ class MFNetTorch(nn.Module):
                 if child in anc_and_target:
                     pval = self.graph.edges[node, child]['func'](xinput)
 
+                    # print("\n")
+                    # print("node = ", node)
+                    # print("child = ", child)
                     # print("pval shape", pval.shape)
-                    
+                    # print(self.graph.edges[node, child]['out_rows'],  self.graph.edges[node, child]['out_cols'])
                     pval = pval.reshape(pval.size(dim=0),
                                         self.graph.edges[node, child]['out_rows'],
                                         self.graph.edges[node, child]['out_cols'])
 
-
+                    # print("feval.shape = ", feval.shape)
+                    # print("pval.reshaped = ", pval.shape)
+                     
                     rho_f = torch.einsum("ijk,ik->ij", pval, feval)
+
+                    # print(f"child = {child}, eval prev size = {self.graph.nodes[child]['eval'].size()}, rho_f.size = {rho_f.size()}")
                     # self.graph.nodes[child]['eval'] += feval * pval
                     # print("pval shape = 
                     self.graph.nodes[child]['eval'] += rho_f
@@ -161,7 +170,7 @@ class MFNetTorch(nn.Module):
                     if self.graph.nodes[child]['parents_left'] == set():
                         queue.put(child)
 
-        return self.graph.nodes[node]['eval']
+        return self.graph.nodes[target_node]['eval']
         
     def forward(self, xinput, target_nodes):
         """Evaluate the surrogate output at target_node.
@@ -178,7 +187,8 @@ class MFNetTorch(nn.Module):
         -------
         list of evaluations for each of the target nodes
         """
-        return [self.eval_target_node(x,t) for x,t in zip(xinput, target_nodes)]
+        vals = [self.eval_target_node(x,t) for x,t in zip(xinput, target_nodes)]
+        return vals
 
     def eval_loss(self, data, targets, loss_fns):
         """Evaluate loss function."""
@@ -228,8 +238,8 @@ def generate_data(model, ndata):
     with torch.no_grad():
         y = model([xlf, xhf], [1, 2])
 
-    d1 = ArrayDataset(xlf, y[0].flatten())
-    d2 = ArrayDataset(xhf, y[1].flatten())
+    d1 = ArrayDataset(xlf, y[0])
+    d2 = ArrayDataset(xhf, y[1])
     data = (d1, d2)
     return data
 
