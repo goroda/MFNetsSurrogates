@@ -3,34 +3,16 @@
 import functools
 import itertools
 
-import matplotlib.pyplot as plt
-import seaborn as sns
-import pandas as pd
-
 import torch
 
 import pyro
 import pyro.distributions as dist
 from pyro.nn.module import to_pyro_module_
-from pyro.infer import MCMC, NUTS
-from pyro.infer import Predictive
-from pyro.optim import Adam
-from pyro.infer import SVI, Trace_ELBO
-from pyro.infer.autoguide import (
-    AutoDelta,
-    AutoNormal,
-    AutoMultivariateNormal,
-    AutoLowRankMultivariateNormal,
-    AutoGuideList,
-    AutoIAFNormal,
-    init_to_feasible,
-)
 
-import net_torch as net
-
-# from pandas.tools.plotting import scatter_matrix
-# import pandas.tools.plotting as pandaplot
-
+try: 
+    from .net_torch import MFNetTorch, make_graph_2
+except:
+    from net_torch import MFNetTorch, make_graph_2
 
 def nestgetattr(obj, name):
     """Nested getattr."""
@@ -88,7 +70,7 @@ class MFNetProbModel(pyro.nn.PyroModule):
     def __init__(self, graph, roots, noise_var=1.0):
         """Initialize Probabilistic MFNET."""
         super().__init__()
-        self.model = net.MFNetTorch(graph, roots)
+        self.model = MFNetTorch(graph, roots)
         self.sigma = noise_var
         convert_to_pyro(self.model)
         
@@ -195,10 +177,29 @@ def samples_to_pandas(samples):
         
 if __name__ == "__main__":
 
+    import matplotlib.pyplot as plt
+    import seaborn as sns
+    import pandas as pd
+
+    from pyro.infer import MCMC, NUTS
+    from pyro.infer import Predictive
+    from pyro.optim import Adam
+    from pyro.infer import SVI, Trace_ELBO
+    from pyro.infer.autoguide import (
+        AutoDelta,
+        AutoNormal,
+        AutoMultivariateNormal,
+        AutoLowRankMultivariateNormal,
+        AutoGuideList,
+        AutoIAFNormal,
+        init_to_feasible,
+    )
+
+    
     torch.manual_seed(1)
 
     pyro.clear_param_store()
-    graph, roots = net.make_graph_2()
+    graph, roots = make_graph_2()
 
 
     # model = MFNetProbModel(graph, roots, noise_var=1e-4)
@@ -222,7 +223,7 @@ if __name__ == "__main__":
     # data
     data1 = x
     data2 = 2*x**2 + x
-    data = [data1.flatten(), data2.flatten()]
+    data = [data1, data2]
 
     # algorithms
     # num_samples = 10000
@@ -231,7 +232,7 @@ if __name__ == "__main__":
     # warmup_steps = 1000
     warmup_steps = 1000
     adam_params = {"lr": 0.005, "betas": (0.95, 0.999)}
-    num_steps = 10000
+    num_steps = 2000
     
     # testing
     xtest = torch.linspace(-1,1,100).reshape(100,1)
@@ -276,21 +277,21 @@ if __name__ == "__main__":
         vals = predictive([xtest]*num_models, targets)
         
     
-    plt.figure()    
-    for ii in range(num_samples):
-        # plt.plot(xtest.flatten(), predictive['_RETURN'][ii, :], '-r', alpha=0.2)
-        plt.plot(xtest.flatten(), vals['obs1'][ii, :], 'blue', alpha=0.2)
-        plt.plot(xtest.flatten(), vals['obs2'][ii, :], 'red', alpha=0.2)
-    plt.plot(x, data1, 'ko')
-    plt.plot(x, data2, 'mo')
+    # plt.figure()    
+    # for ii in range(num_samples):
+    #     # plt.plot(xtest.flatten(), predictive['_RETURN'][ii, :], '-r', alpha=0.2)
+    #     plt.plot(xtest.flatten(), vals['obs1'][ii, :], 'blue', alpha=0.2)
+    #     plt.plot(xtest.flatten(), vals['obs2'][ii, :], 'red', alpha=0.2)
+    # plt.plot(x, data1, 'ko')
+    # plt.plot(x, data2, 'mo')
 
 
-    df = samples_to_pandas(param_samples)
-    plt.figure()
-    plt.plot(df.iloc[:, 0])
-    plt.plot(df.iloc[:, 1])
+    # df = samples_to_pandas(param_samples)
+    # plt.figure()
+    # plt.plot(df.iloc[:, 0])
+    # plt.plot(df.iloc[:, 1])
 
 
-    pd.plotting.scatter_matrix(df, alpha=0.2, figsize=(6,6), diagonal='kde')
+    # pd.plotting.scatter_matrix(df, alpha=0.2, figsize=(6,6), diagonal='kde')
 
-plt.show()    
+    plt.show()    

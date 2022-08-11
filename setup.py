@@ -1,4 +1,5 @@
 import setuptools
+from setuptools import find_packages
 
 setuptools.setup(
     name="mfnets_surrogates",
@@ -13,7 +14,9 @@ setuptools.setup(
         "License :: OSI Approved :: MIT License",
         "Operating System :: OS Independent",
     ],
+    packages=find_packages(include=['mfnets_surrogates']),
     setup_requires=[],
-    install_requires=['numpy >= 1.14','networkx'],
+    install_requires=['numpy >= 1.14','networkx','torch', 'pyro-ppl'],
+    test_suite='tests',
     license='MIT',
 )

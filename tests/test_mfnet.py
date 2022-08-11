@@ -1,5 +1,5 @@
 import unittest
-from net import *
+from mfnets_surrogates.net import *
 
 def make_graph_2():
     """Make a graph with two nodes

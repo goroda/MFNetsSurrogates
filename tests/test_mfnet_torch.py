@@ -1,5 +1,5 @@
 import unittest
-from net_torch import *
+from mfnets_surrogates.net_torch import *
 import numpy as np
 import torch
 

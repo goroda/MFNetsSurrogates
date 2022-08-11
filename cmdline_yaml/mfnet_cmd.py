@@ -1,7 +1,5 @@
 """Command Line Utility for MFNETS."""
 import sys
-# sys.path.append("../mfnets_surrogates")
-sys.path.append("/Users/alex/Software/mfnets_surrogate/mfnets_surrogates")
 import yaml
 import os
 
@@ -13,8 +11,8 @@ import torch
 import numpy as np
 import matplotlib.pyplot as plt
 
-import net_torch as net
-import net_pyro
+from mfnets_surrogates import net_torch as net
+from mfnets_surrogates import net_pyro
 
 from pyro.infer import MCMC, NUTS, Predictive, SVI, Trace_ELBO
 from pyro.optim import Adam
@@ -199,7 +197,7 @@ if __name__ == "__main__":
         exit(1)
 
 
-    print(input_spec)
+    # print(input_spec)
     
     model_info = parse_model_info(input_spec)
 

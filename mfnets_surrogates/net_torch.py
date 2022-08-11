@@ -10,11 +10,8 @@ try:
 except ImportError:
     from queue import Queue as SimpleQueue
 
-import matplotlib.pyplot as plt
-
 # dtype = torch.float
 device = torch.device("cpu")
-
 
 class ArrayDataset(torch.utils.data.Dataset):
     """Dataset from an array of data."""
@@ -269,7 +266,8 @@ def plot_funcs(model, x, data=None):
     
 
 if __name__ == "__main__":
-
+    import matplotlib.pyplot as plt
+    
     torch.manual_seed(1)
     graph, root = make_graph_2()
 
