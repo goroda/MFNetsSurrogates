@@ -16,7 +16,7 @@ setuptools.setup(
     ],
     packages=find_packages(include=['mfnets_surrogates']),
     setup_requires=[],
-    install_requires=['numpy = 1.23','networkx','torch', 'pyro-ppl'],
+    install_requires=['numpy','networkx','torch', 'pyro-ppl'],
     test_suite='tests',
     license='MIT',
 )
