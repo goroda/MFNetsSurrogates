@@ -9,7 +9,7 @@ import argparse
 import networkx as nx
 import torch
 import numpy as np
-import matplotlib.pyplot as plt
+# import matplotlib.pyplot as plt
 
 from mfnets_surrogates import net_torch as net
 from mfnets_surrogates import net_pyro
