@@ -9,6 +9,7 @@ import argparse
 import networkx as nx
 import torch
 import numpy as np
+from sklearn import preprocessing
 # import matplotlib.pyplot as plt
 
 from mfnets_surrogates import net_torch as net
@@ -159,6 +160,8 @@ def parse_evaluation_locations(input_spec):
 def model_info_to_dataloaders(model_info, graph_nodes):
     """Convert datasets to dataloaders for pytorch training."""
     data_loaders = []
+    scalers_in = {}
+    scalers_out ={}
     for node in graph.nodes:
         model = model_info[node]
         # print(model)
@@ -169,10 +172,20 @@ def model_info_to_dataloaders(model_info, graph_nodes):
         if y.ndim == 1:
             y = y[:, np.newaxis] 
 
-        dataset = net.ArrayDataset(torch.Tensor(x), torch.Tensor(y))
-        data_loaders.append(torch.utils.data.DataLoader(dataset, batch_size=x.shape[0], shuffle=False))
 
-    return data_loaders
+        scaler_in = preprocessing.StandardScaler().fit(x)
+        x_scaled = scaler_in.transform(x)
+
+        scaler_out = preprocessing.StandardScaler().fit(y)
+        y_scaled = scaler_out.transform(y)
+
+        scalers_in[node]  = scaler_in
+        scalers_out[node] = scaler_out
+        # dataset = net.ArrayDataset(torch.Tensor(x), torch.Tensor(y))
+        dataset = net.ArrayDataset(torch.Tensor(x_scaled), torch.Tensor(y_scaled))
+        data_loaders.append(torch.utils.data.DataLoader(dataset, batch_size=x.shape[0], shuffle=False))        
+
+    return data_loaders, scalers_in, scalers_out
 
 if __name__ == "__main__":
 
@@ -225,7 +238,8 @@ if __name__ == "__main__":
         ## Training Setup
         loss_fns = net.construct_loss_funcs(model)
 
-        data_loaders = model_info_to_dataloaders(model_info, graph.nodes)
+        data_loaders, scalers_in, scalers_out = model_info_to_dataloaders(model_info, graph.nodes)
+        
 
         ## Train
         model.train(data_loaders, target_nodes, loss_fns)
@@ -239,8 +253,11 @@ if __name__ == "__main__":
                 for (fname, data) in test_pts:
                     # print("fname = ", fname)
                     x = torch.Tensor(data.to_numpy())
-                    vals = model([x], [node])[0].detach().numpy()
-                    results = pd.DataFrame(vals, columns=model_info[node].train_out.columns)
+                    x_scaled = torch.Tensor(scalers_in[node].transform(x))
+                    
+                    vals = model([x_scaled], [node])[0].detach().numpy()
+                    vals_unscaled = scalers_out[node].inverse_transform(vals)
+                    results = pd.DataFrame(vals_unscaled, columns=model_info[node].train_out.columns)
                     dirname =  model_info[node].output_dir
                     os.makedirs(dirname, exist_ok=True)
                     filename = os.path.join(dirname, f"{fname}.evals")

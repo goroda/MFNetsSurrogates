@@ -14,6 +14,7 @@ mfnets_surrogates/multinormal_test_results/
 *.pyc
 
 cmdline_yaml/example_results
+cmdline_yaml/example_results_mo
 
 *dist*
 *egg*
