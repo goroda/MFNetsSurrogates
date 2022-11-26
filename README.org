@@ -367,6 +367,7 @@ Please cite the following paper if you find this code to be useful
 
 ** TODOS 
    - Update README with the new interface.
+   - CMDLINE_YAML has scaling setup for the regression, but need to set it up for the sampling
 ** More information
 
  Author: Alex Gorodetsky 
