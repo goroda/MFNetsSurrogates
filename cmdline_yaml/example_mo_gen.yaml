@@ -1,6 +1,6 @@
 ---
 num_models: 2
-save_dir: example_results_mo
+save_dir: example_results_mo_gen
 model_info: # names must match the nodes in the graph.edge_list file
   - 
       name: 1 # must match edge_list file
@@ -34,7 +34,13 @@ algorithm:
   sample_output_files: posterior_samples.dat
 graph:
   structure: example_data_mo/graph.edge_list
-  node_model: linear
-  edge_model: linear
-  connection_type: scale-shift # composition (eventually)
+  connection_type: general # node names below must match those above
+  connection_models:
+    -
+      name: 1
+      node_type: linear
+    -
+      name: 2
+      node_type: feedforward
+      hidden_layers: [20, 20] 
 ...

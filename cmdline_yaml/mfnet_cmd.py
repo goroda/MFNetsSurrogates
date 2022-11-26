@@ -39,7 +39,7 @@ def fill_graph(graph, input_spec, model_info):
     """Assign node and edge functions."""
 
     if input_spec['graph']['connection_type'] == 'scale-shift':
-        logging.info('Pointwise scale-shift graph is used')
+        logging.info('Scale-shift edge functions are used')
         for node in graph.nodes:
 
             # works because model names must match in the input file and in the graph.edge_list file
@@ -61,6 +61,52 @@ def fill_graph(graph, input_spec, model_info):
             graph.edges[e1, e2]['out_rows'] = dim_out_rows
             graph.edges[e1, e2]['out_cols'] = dim_out_cols
             graph.edges[e1, e2]['dim_in'] = dim_in
+
+    elif input_spec['graph']['connection_type'] == "general":
+        logging.info('General edge functions are used')
+        for node in graph.nodes:
+            dim_in = model_info[node].dim_in
+            dim_out = model_info[node].dim_out
+            # print(list(graph.predecessors(node)
+            num_inputs_parents = np.sum([model_info[p].dim_out for p in graph.predecessors(node)])
+
+            logging.info(f'Assigning model for node {node}')
+            # so far only use linear functions to test interface
+            if num_inputs_parents == 0:
+                for model in input_spec['graph']['connection_models']:
+                    if model['name'] == node:
+                        logging.info(f"Leaf node with type: {model['node_type']}")
+                        if model['node_type'] == "linear":
+                            graph.nodes[node]['func'] = torch.nn.Linear(dim_in, dim_out, bias=True)
+                        elif model['node_type'] == "feedforward":
+                            hidden_layer = model['hidden_layers']
+                            logging.info(f'Feedforward with hidden layer sizes: {hidden_layer}')
+                            graph.nodes[node]['func'] = net.FeedForwardNet(dim_in, dim_out,
+                                                                           hidden_layer_sizes=hidden_layer)
+                        else:
+                            raise Exception(f"Node type {model.node_type} unknown")
+                        break
+                                
+            else:
+                for model in input_spec['graph']['connection_models']:
+                    if model['name'] == node:
+                        logging.info(f"Regular node with type: {model['node_type']}")
+                        if model['node_type'] == "linear":
+                            graph.nodes[node]['func'] = net.LinearScaleShift(dim_in, dim_out, num_inputs_parents)
+                        elif model['node_type'] == "feedforward":
+                            hidden_layer = model['hidden_layers']
+                            logging.info(f'Feedforward with hidden layer sizes: {hidden_layer}')
+                            graph.nodes[node]['func'] = net.FullyConnectedNNEdge(dim_in, dim_out,
+                                                                                 num_inputs_parents,
+                                                                                 hidden_layer_sizes=hidden_layer)
+                        else:
+                            raise Exception(f"Node type {model.node_type} unknown")
+                        break
+                
+            graph.nodes[node]['dim_in'] = dim_in
+            graph.nodes[node]['dim_out'] = dim_out
+            
+            
     else:
         logging.error(f"Connection type {model_info['graph']['connection_type']} is not recognized")
         exit(1)
@@ -78,8 +124,8 @@ def parse_graph(input_spec, model_info):
         print(f"Cannot open file {graph_file}")
         exit(1)
 
-    graph = fill_graph(nx.parse_edgelist(edge_list, create_using=nx.DiGraph), input_spec, model_info)
-
+    graph = fill_graph(nx.parse_edgelist(edge_list, create_using=nx.DiGraph, nodetype=int), input_spec, model_info)
+        
     roots = set([x for x in graph.nodes() if graph.in_degree(x) == 0])
 
     logging.info(f"Root models: {roots}")
@@ -94,7 +140,7 @@ def parse_model_info(args):
     models = {}
     for model in input_spec['model_info']:
 
-        name = str(model['name'])
+        name = model['name']
 
         try: 
             train_input = pd.read_csv(model['train_input'], delim_whitespace=True)
@@ -125,7 +171,7 @@ def parse_evaluation_locations(input_spec):
     model_evals = {} 
     for ii, model in enumerate(input_spec['model_info']):
 
-        name = str(model['name'])
+        name = model['name']
 
         if 'test_output' in model:
 
@@ -233,7 +279,7 @@ if __name__ == "__main__":
         logging.info("Performing Regression")
         #################
         ## Pytorch
-        model = net.MFNetTorch(graph, roots)
+        model = net.MFNetTorch(graph, roots, edge_type=input_spec['graph']['connection_type'])
 
         ## Training Setup
         loss_fns = net.construct_loss_funcs(model)
@@ -263,12 +309,14 @@ if __name__ == "__main__":
                     filename = os.path.join(dirname, f"{fname}.evals")
                     results.to_csv(filename, sep=' ', index=False)
 
-    elif input_spec['inference_type'] == "bayes":
+    elif input_spec['inference_type'] == "bayes": # UNTESTED
 
         logging.info("Running Bayesian Inference")
         noise_var = float(input_spec['algorithm']['noise_var'])
 
-        model = net_pyro.MFNetProbModel(graph, roots, noise_var=noise_var)
+        model = net_pyro.MFNetProbModel(graph, roots, 
+                                        edge_type=input_spec['graph']['connection_type'],
+                                        noise_var=noise_var,)
 
         alg = input_spec['algorithm']['parameterization']
 

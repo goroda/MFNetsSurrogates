@@ -55,13 +55,68 @@ def make_graph_4():
     graph.add_edge(2, 4, func=torch.nn.Linear(dim_in, dim_out[1] * dim_out[3], bias=True), out_rows=dim_out[3], out_cols=dim_out[1], dim_in=1)
     graph.add_edge(3, 2, func=torch.nn.Linear(dim_in, dim_out[2] * dim_out[1], bias=True), out_rows=dim_out[1], out_cols=dim_out[2], dim_in=1)
 
-    roots = set([1, 4])
+    roots = set([1, 3])
+    return graph, roots, dim_out
+
+def make_graph_4gen():
+    """A graph with 4 nodes with different output dims and generic edge functions
+
+    1- > 4 <- 2 <- 3
+    """
+
+    graph = nx.DiGraph()
+
+    dim_in = 1
+    dim_out = [2, 3, 6, 4]
+    
+    graph.add_node(1, func=torch.nn.Linear(dim_in, dim_out[0], bias=True))
+    graph.add_node(2, func=LinearScaleShift(dim_in, dim_out[1], dim_out[2]))
+    graph.add_node(3, func=torch.nn.Linear(dim_in, dim_out[2], bias=True))
+    graph.add_node(4, func=LinearScaleShift(dim_in, dim_out[3],dim_out[0]+dim_out[1]))
+    
+
+    graph.add_edge(1, 4)
+    graph.add_edge(2, 4)
+    graph.add_edge(3, 2)
+
+    roots = set([1, 3])
+    return graph, roots, dim_out
+
+def make_graph_4gen_nn():
+    """A graph with 4 nodes with different output dims and generic edge functions as fully connected neural networks
+
+    1- > 4 <- 2 <- 3
+    """
+
+    graph = nx.DiGraph()
+
+    dim_in = 1
+    dim_out = [2, 3, 6, 4]
+    
+    graph.add_node(1, func=torch.nn.Linear(dim_in, dim_out[0], bias=True))
+    graph.add_node(2, func=FullyConnectedNNEdge(dim_in, dim_out[1], dim_out[2],
+                                                hidden_layer_sizes=[100, 100,
+                                                                    20, 20]))
+    graph.add_node(3, func=torch.nn.Linear(dim_in, dim_out[2], bias=True))
+    graph.add_node(4, func=FullyConnectedNNEdge(dim_in, dim_out[3],
+                                                dim_out[0]+dim_out[1],
+                                                hidden_layer_sizes=[100,
+                                                                    100,
+                                                                    20,
+                                                                    20]))
+    
+
+    graph.add_edge(1, 4)
+    graph.add_edge(2, 4)
+    graph.add_edge(3, 2)
+
+    roots = set([1, 3])
     return graph, roots, dim_out
 
 
 class TestMfnet(unittest.TestCase):
 
-    # @unittest.skip('testing other')
+    @unittest.skip('testing other')
     def test_least_squares_opt(self):
         torch.manual_seed(2)
 
@@ -107,6 +162,7 @@ class TestMfnet(unittest.TestCase):
             print("err = ", err)
             assert err<1e-3
 
+    @unittest.skip('testing other')
     def test_least_squares_opt_multi_out(self):
         torch.manual_seed(2)
 
@@ -159,7 +215,122 @@ class TestMfnet(unittest.TestCase):
             predict_test = mfsurr_learn.forward([x_test], [node])[0]
             err = torch.linalg.norm(predict_test-y_test)/np.sqrt(ntest)
             print("err = ", err)
-            assert err<1e-3            
+            assert err<1e-3
+
+    @unittest.skip('testing other')
+    def test_least_squares_opt_multi_out_gen(self):
+        torch.manual_seed(2)
+
+        # print("\n")
+        graph, roots, dim_out = make_graph_4()
+
+        node = 4
+
+        ## Truth
+        mfsurr_true = MFNetTorch(graph, roots)
+
+        dx = 1
+        ndata = [0] * 4
+        ndata[3] = 500
+        x = torch.rand(ndata[3], 1)
+        # y =  mfsurr_true.forward([x]*4,[1, 2, 3, 4])
+        y =  mfsurr_true.forward([x], [4])[0]
+        # print("\n")
+        # print("yshapes = ", [yy.size() for yy in y])
+        # print("y = ", y)
+        # exit(1)
+        std = 1.#1e-4
+
+        # learning
+        graph_learn, roots_learn, _ = make_graph_4gen()        
+        mfsurr_learn = MFNetTorch(graph_learn, roots_learn, edge_type="general")
+
+        loss_fns = construct_loss_funcs(mfsurr_learn)    
+        dataset = ArrayDataset(x, y)
+        data_loaders = [torch.utils.data.DataLoader(dataset,
+                                                    batch_size=ndata[3],
+                                                    shuffle=False)]
+        # print(mfsurr_learn)
+        mfsurr_learn.train(data_loaders, [node], loss_fns[(node-1):])
+
+        print("\n")
+        with torch.no_grad():
+            predict = mfsurr_learn([x],[node])[0]
+            # print(dim_out)
+            # print(predict.size())
+            assert predict.size(dim=1) == dim_out[node-1]
+
+            err = torch.linalg.norm(predict-y)**2/2
+            print("err = ", err)
+            assert err<1e-4
+
+        ntest=1000
+        x_test = torch.rand(ntest, dx)
+        with torch.no_grad():
+            y_test =  mfsurr_true.forward([x_test],[node])[0]
+            predict_test = mfsurr_learn.forward([x_test], [node])[0]
+            err = torch.linalg.norm(predict_test-y_test)/np.sqrt(ntest)
+            print("err = ", err)
+            assert err<1e-3
+
+    # @unittest.skip('testing other')
+    def test_least_squares_opt_multi_out_gen_nn(self):
+        torch.manual_seed(2)
+
+        # print("\n")
+        # graph, roots, dim_out = make_graph_4gen_nn()
+        graph, roots, dim_out = make_graph_4()
+
+        node = 4
+
+        ## Truth
+        # mfsurr_true = MFNetTorch(graph, roots, edge_type="general")
+        mfsurr_true = MFNetTorch(graph, roots)        
+
+        dx = 1
+        ndata = [0] * 4
+        ndata[3] = 500
+        x = torch.rand(ndata[3], 1)
+        # y =  mfsurr_true.forward([x]*4,[1, 2, 3, 4])
+        y =  mfsurr_true.forward([x], [4])[0]
+        # print("\n")
+        # print("yshapes = ", [yy.size() for yy in y])
+        # print("y = ", y)
+        # exit(1)
+        std = 1.#1e-4
+
+        # learning
+        graph_learn, roots_learn, _ = make_graph_4gen_nn()        
+        mfsurr_learn = MFNetTorch(graph_learn, roots_learn, edge_type="general")
+
+        loss_fns = construct_loss_funcs(mfsurr_learn)    
+        dataset = ArrayDataset(x, y)
+        data_loaders = [torch.utils.data.DataLoader(dataset,
+                                                    batch_size=ndata[3],
+                                                    shuffle=False)]
+        # print(mfsurr_learn)
+        mfsurr_learn.train(data_loaders, [node], loss_fns[(node-1):],
+                           max_iter=500)
+
+        print("\n")
+        with torch.no_grad():
+            predict = mfsurr_learn([x],[node])[0]
+            # print(dim_out)
+            # print(predict.size())
+            assert predict.size(dim=1) == dim_out[node-1]
+
+            err = torch.linalg.norm(predict-y)**2/2
+            print("err = ", err)
+            assert err<1e-4
+
+        ntest=1000
+        x_test = torch.rand(ntest, dx)
+        with torch.no_grad():
+            y_test =  mfsurr_true.forward([x_test],[node])[0]
+            predict_test = mfsurr_learn.forward([x_test], [node])[0]
+            err = torch.linalg.norm(predict_test-y_test)/np.sqrt(ntest)
+            print("err = ", err)
+            assert err<1e-3
         
 if __name__== "__main__":    
     mfnet_test_suite = unittest.TestLoader().loadTestsFromTestCase(TestMfnet)

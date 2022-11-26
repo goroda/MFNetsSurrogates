@@ -79,7 +79,7 @@ class TestMfnet(unittest.TestCase):
             learn_obj, learn_obj_grad, x0, mfsurr, node, x, y, std)
         rel_err = err / np.linalg.norm(fgrad)
 
-        assert rel_err <1e-8
+        assert rel_err <1e-7, f"Relative error of finite difference gradient is {rel_err}"
 
     def test_jac(self):
         """Test building block for jacobian calculation """

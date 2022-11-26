@@ -31,7 +31,7 @@ class ArrayDataset(torch.utils.data.Dataset):
         return self.x.size(dim=0)
 
 def make_graph_2():
-    """Make a graph with two nodes.
+    """Make a graph with two nodes (scale and shift).
 
     1 -> 2
     """
@@ -46,11 +46,156 @@ def make_graph_2():
     graph.add_edge(1, 2, func=torch.nn.Linear(dim_in, 1, bias=True), out_rows=1, out_cols=1, dim_in=1)
     return graph, set([1])
 
+class FeedForwardNet(nn.Module):
+    """A flexible generalized model with fully connected layers"""
+
+    def __init__(self, dim_in, dim_out, hidden_layer_sizes):
+        super().__init__()
+        assert len(hidden_layer_sizes) > 0, "must have at least 1 hidden layer"
+
+        layers = [torch.nn.Linear(dim_in, hidden_layer_sizes[0], bias=True),
+                  nn.Tanh()]
+        for ii in range(len(hidden_layer_sizes)-1):
+            layers.append(torch.nn.Linear(hidden_layer_sizes[ii],
+                                          hidden_layer_sizes[ii+1],
+                                          bias=True))
+            layers.append(nn.Tanh())
+        layers.append(torch.nn.Linear(hidden_layer_sizes[-1],
+                                      dim_out,
+                                      bias=True))
+        self.net = nn.Sequential(*layers)
+
+    def forward(self, x):
+        return self.net(x)
+    
+
+class FullyConnectedNNEdge(nn.Module):
+    """A fully connected NN to model edges/nodes for the MFNET"""
+
+    def __init__(self, dim_in, dim_out, num_parent_vals_in,
+                 hidden_layer_sizes=[10]):
+        """Initialize the LinearScaleShift node for the MFNET
+
+        f_{j} = NN(x, vec{parent_outputs})
+        
+        Parameters
+        ----------
+        dim_in : integer 
+            Dimension of the input space 
+
+        dim_out : integer 
+            Dimension of the output space 
+        
+        num_parent_vals_in : integer 
+            Dimension of outputs of the parents         
+        """
+        super().__init__()
+        
+        self.dim_out = dim_out
+        self.num_parent_vals_in = num_parent_vals_in
+        
+        # edge model
+        self.node = FeedForwardNet(dim_in + num_parent_vals_in,
+                                   dim_out,
+                                   hidden_layer_sizes)
+
+    def forward(self, xinput, parent_vals):
+        """Evaluate the fully connected NN model."""
+
+        xin = torch.cat((xinput, parent_vals), dim=-1)
+        return self.node(xin)
+
+class LinearScaleShift(nn.Module):
+    """A generalized scale and shift operator for the MFNET"""
+
+    def __init__(self, dim_in, dim_out, num_parent_vals_in):
+        """Initialize the LinearScaleShift node for the MFNET
+
+        f_{j} = edge(x) \vec{parent_outputs} + node(x)
+        
+        Parameters
+        ----------
+        dim_in : integer 
+            Dimension of the input space 
+
+        dim_out : integer 
+            Dimension of the output space 
+        
+        num_parent_vals_in : integer 
+            Dimension of outputs of the parents         
+        """
+        super().__init__()
+        
+        self.dim_out = dim_out
+        self.num_parent_vals_in = num_parent_vals_in
+        
+        # edge model
+        self.edge = torch.nn.Linear(dim_in, dim_out * num_parent_vals_in, bias=True)
+
+        # node model
+        self.node = torch.nn.Linear(dim_in, dim_out, bias=True)
+
+    def forward(self, xinput, parent_vals):
+        """Evaluate the linear scale shift node model
+
+        Parent values are expected to be (num_samples, flattened)
+        """
+
+        edge_eval = self.edge(xinput) # should be num data x (num_out * num_parents_val_in)
+        edge_eval = edge_eval.reshape(edge_eval.size(dim=0),
+                                           self.dim_out,
+                                           self.num_parent_vals_in)
+
+        # print("input size = ", xinput.size())
+        # print("parent_val size = ", parent_vals.size())
+        edge_func = torch.einsum("ijk,ik->ij", edge_eval, parent_vals)
+
+        node_func = self.node(xinput)
+
+        return edge_func + node_func
+        
+def make_graph_2gen():
+    """Make a graph with two nodes (generalized scale-shift)
+
+    1 -> 2
+    """
+    graph = nx.DiGraph()
+
+    # pnodes = torch.randn((2, 2), device=device, dtype=dtype)
+    # pedges = torch.randn((1, 2), device=device, dtype=dtype)
+
+    dim_in = 1
+    dim_out1 = 1
+    dim_out2 = 1
+    graph.add_node(1, func=torch.nn.Linear(dim_in, dim_out1, bias=True))
+    graph.add_node(2, func=LinearScaleShift(dim_in, dim_out2, dim_out1))
+    graph.add_edge(1, 2)
+    return graph, set([1])
+
+def make_graph_2gen_nn():
+    """Make a graph with two nodes (generalized neural network)
+
+    1 -> 2
+    """
+    graph = nx.DiGraph()
+
+    # pnodes = torch.randn((2, 2), device=device, dtype=dtype)
+    # pedges = torch.randn((1, 2), device=device, dtype=dtype)
+
+    dim_in = 1
+    dim_out1 = 1
+    dim_out2 = 1
+    graph.add_node(1, func=torch.nn.Linear(dim_in, dim_out1, bias=True))
+    graph.add_node(2, func=FullyConnectedNNEdge(dim_in, dim_out2, dim_out1,
+                                                hidden_layer_sizes=[20, 20, 20]))
+    graph.add_edge(1, 2)
+    return graph, set([1])
+
 
 class MFNetTorch(nn.Module):
     """Multifidelity Network."""
 
-    def __init__(self, graph, roots):
+    def __init__(self, graph, roots, edge_type="scale-shift"):
         """Initialize a multifidelity surrogate via a graph and its roots.
 
         Parameters
@@ -61,11 +206,15 @@ class MFNetTorch(nn.Module):
         roots : list
             The ids of every root node in the network
 
+        edge_type: string 
+            Either "scale-shift" or "general"
+
         """
         super(MFNetTorch, self).__init__()
         self.graph = graph
         self.roots = roots
         self.target_node = None
+        self.edge_type = edge_type
         self.modules_list = nn.ModuleList()
 
 
@@ -90,7 +239,59 @@ class MFNetTorch(nn.Module):
                 except: # what exception is it?
                     continue
 
-    def eval_target_node(self, xinput, target_node):
+    def eval_node_recurse_(self, xinput, node):
+        """Private function recursively evaluating all nodes"""
+        
+        parents = list(self.graph.predecessors(node))
+        # print(f"Parents of {node}: {parents}")
+        if len(parents) == 0: # leaf node
+            # print("\t leaf node: ", node)
+            pval = self.graph.nodes[node]['func'](xinput)
+            self.graph.nodes[node]['eval'] = pval
+            # print("\t xinput shape = ", xinput.size())
+            # print("\t eval shape = ", pval.size())
+            return pval
+        else:
+            for parent in parents: 
+                self.eval_node_recurse_(xinput, parent)
+
+            # need to flatten
+            parent_evals = torch.cat([self.graph.nodes[p]['eval'] for p in parents], dim=-1)
+            # print(parent_evals.size())
+            # print(xinput.size())
+            pval = self.graph.nodes[node]['func'](xinput, parent_evals)
+            self.graph.nodes[node]['eval'] = pval
+            return pval
+            
+    
+    def eval_target_node_general_(self, xinput, target_node):
+        """Evaluate the surrogate output at target_node.
+
+        Parameters
+        ----------
+        xinput :  np.ndarray (nsamples, ndim)
+            The independent variables of the model at which to evaluate target node
+
+        target_node : integer
+            The id of the nodes to evaluate
+
+        Returns
+        -------
+        This function adds the following attributes to the underlying graph
+
+        eval :
+            stores the evaluation of the function represented by the
+            particular node / edge the evaluations at the nodes are
+            cumulative (summing up all ancestors) whereas the edges are local
+
+        """
+
+        self.zero_attributes()
+        eval = self.eval_node_recurse_(xinput, target_node)
+        return eval
+        
+        
+    def eval_target_node_scale_shift_(self, xinput, target_node):
         """Evaluate the surrogate output at target_node.
 
         Parameters
@@ -168,7 +369,16 @@ class MFNetTorch(nn.Module):
                         queue.put(child)
 
         return self.graph.nodes[target_node]['eval']
-        
+
+    def eval_target_node(self, xinput, target_node):
+
+        if self.edge_type == "scale-shift":
+            return self.eval_target_node_scale_shift_(xinput, target_node)
+        elif self.edge_type == "general":
+            return self.eval_target_node_general_(xinput, target_node)
+        else:
+            raise Exception(f"Edge type {self.edge_type} unrecognized")
+    
     def forward(self, xinput, target_nodes):
         """Evaluate the surrogate output at target_node.
 
@@ -206,10 +416,10 @@ class MFNetTorch(nn.Module):
         return loss
     
 
-    def train(self, data, targets, loss_fns):
+    def train(self, data, targets, loss_fns, max_iter=100):
         """Train the model."""
         optimizer = torch.optim.LBFGS(self.parameters(),
-                                      max_iter=100,
+                                      max_iter=max_iter,
                                       tolerance_grad=1e-15,
                                       tolerance_change=1e-15,
                                       history_size=500,
@@ -245,7 +455,7 @@ def construct_loss_funcs(model):
     num_nodes = len(model.graph.nodes)
     return [torch.nn.MSELoss() for _ in range(num_nodes)]
             
-def plot_funcs(model, x, data=None):
+def plot_funcs(model, x, data=None, title=None):
     """Plot the univariate functions."""
     nnodes = len(model.graph.nodes)
     with torch.no_grad():
@@ -261,12 +471,13 @@ def plot_funcs(model, x, data=None):
     if data != None:
         plt.plot(data[0].x, data[0].y, 'ro', label='Low-fidelity Data')
         plt.plot(data[1].x, data[1].y, 'ko', label='High-fidelity Data')
-        
+
+    if title is not None:
+        plt.title(title)
     plt.legend()
     
 
-if __name__ == "__main__":
-    import matplotlib.pyplot as plt
+def run_scale_shift():
     
     torch.manual_seed(1)
     graph, root = make_graph_2()
@@ -302,7 +513,92 @@ if __name__ == "__main__":
         print("True parameters")
         print(torch.nn.utils.parameters_to_vector(model.parameters()))
         
-    
-    
     plt.show()
 
+
+def run_generalized():
+
+    
+    torch.manual_seed(1)
+    graph, root = make_graph_2gen()
+
+    model = MFNetTorch(graph, root, edge_type="general")
+
+    # val = model.eval_target_node_general_(torch.Tensor([0.2]), 2)
+    # print("val = ", val)
+    # exit()    
+
+    x = torch.linspace(-3, 3, 10).reshape(10, 1)
+    plot_funcs(model, x, title="True Model")
+
+    loss_fns = construct_loss_funcs(model)
+    data = generate_data(model, [20, 20])
+    data_loaders = [torch.utils.data.DataLoader(d, batch_size=len(d), shuffle=False)
+                    for d in data]
+
+
+    graph2, root2 = make_graph_2gen()
+    model_trained = MFNetTorch(graph2, root2, edge_type="general")
+    plot_funcs(model_trained, x, title="Un-trained initial mfnet")
+
+    model_trained.train(data_loaders, [1, 2], loss_fns)
+
+    plot_funcs(model_trained, x, data, title="Trained mfnet")
+
+    with torch.no_grad():
+        loss2 = model_trained.eval_loss(data_loaders, [1, 2], loss_fns)
+        print("loss2 = ", loss2)
+        print(model_trained)
+        print("Trained parameters")
+        print(torch.nn.utils.parameters_to_vector(model_trained.parameters()))
+        print("True parameters")
+        print(torch.nn.utils.parameters_to_vector(model.parameters()))
+        
+    plt.show()        
+
+
+def run_generalized_nn():
+
+    
+    torch.manual_seed(1)
+    graph, root = make_graph_2gen() # train with non nn
+
+    model = MFNetTorch(graph, root, edge_type="general")
+
+    # val = model.eval_target_node_general_(torch.Tensor([0.2]), 2)
+    # print("val = ", val)
+    # exit()    
+
+    x = torch.linspace(-3, 3, 10).reshape(10, 1)
+    plot_funcs(model, x, title="True Model")
+
+    loss_fns = construct_loss_funcs(model)
+    data = generate_data(model, [20, 20])
+    data_loaders = [torch.utils.data.DataLoader(d, batch_size=len(d), shuffle=False)
+                    for d in data]
+
+
+    graph2, root2 = make_graph_2gen_nn()
+    model_trained = MFNetTorch(graph2, root2, edge_type="general")
+    plot_funcs(model_trained, x, title="Un-trained initial mfnet")
+
+    model_trained.train(data_loaders, [1, 2], loss_fns)
+
+    plot_funcs(model_trained, x, data, title="Trained mfnet")
+
+    with torch.no_grad():
+        loss2 = model_trained.eval_loss(data_loaders, [1, 2], loss_fns)
+        print("loss2 = ", loss2)
+        print(model_trained)
+        print("Trained parameters")
+        print(torch.nn.utils.parameters_to_vector(model_trained.parameters()))
+        print("True parameters")
+        print(torch.nn.utils.parameters_to_vector(model.parameters()))
+        
+    plt.show()
+    
+if __name__ == "__main__":
+    import matplotlib.pyplot as plt
+    # run_scale_shift()
+    # run_generalized()
+    run_generalized_nn()

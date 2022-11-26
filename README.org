@@ -174,9 +174,6 @@ evals_surr = surr_learned.get_evals() # can also get all the fidelity evaluation
    
 The PyTorch interface to MFNets provides significant flexibility to have arbitrary functional representations of nodes and edges.
 
-
-
-
 Here we provide an example of using a PyTorch enabled MFNET. First the graph is defined, with each node and edge having a =func= attribute which defines the model. In the below example they are all linear models, but they can be any PyTorch model.
 
 
@@ -366,6 +363,9 @@ Please cite the following paper if you find this code to be useful
 
 
 ** TODOS 
+   - Add unit tests for the Pyro interface 
+   - Ensure multi-output works with Pyro
+   - Ensure generalized edge connections work with pyro
    - Update README with the new interface.
 ** More information
 
