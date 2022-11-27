@@ -217,12 +217,13 @@ class MFNetTorch(nn.Module):
         self.edge_type = edge_type
         self.modules_list = nn.ModuleList()
 
-
         for node, func in self.graph.nodes.data('func'):
             self.modules_list.add_module(f"node{node}", func)
 
         for from_n, to_n, func in self.graph.edges.data('func'):
-            self.modules_list.add_module(f'edge{from_n}->{to_n}', func)            
+            # print("from_n", from_n, "to_n", to_n, "func ", func)
+            if func is not None:
+                self.modules_list.add_module(f'edge{from_n}->{to_n}', func)
             
     def zero_attributes(self):
         """Zero all attributes except 'func' and 'param'."""

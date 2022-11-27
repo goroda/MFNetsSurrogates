@@ -18,6 +18,7 @@ This library depends on
 - [[https://sandialabs.github.io/pyapprox/index.html][PyApprox]] (optional for L1 regularization)
 - [[https://pytorch.org][PyTorch]]
 - [[https://pyro.ai][Pyro]]
+- Pandas
 
 ** Usage
 
@@ -367,6 +368,7 @@ Please cite the following paper if you find this code to be useful
    - Ensure multi-output works with Pyro
    - Ensure generalized edge connections work with pyro
    - Update README with the new interface.
+   - Training for the MAP estimate with AutoDelta doesnt work
 ** More information
 
  Author: Alex Gorodetsky 

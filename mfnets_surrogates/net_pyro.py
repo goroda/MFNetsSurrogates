@@ -5,14 +5,19 @@ import itertools
 
 import torch
 
+import pandas as pd
+from pyro.infer import Predictive
+from pyro.optim import Adam
+from pyro.infer import SVI, Trace_ELBO
+
 import pyro
 import pyro.distributions as dist
 from pyro.nn.module import to_pyro_module_
 
 try: 
-    from .net_torch import MFNetTorch, make_graph_2
+    from .net_torch import MFNetTorch, make_graph_2, make_graph_2gen, make_graph_2gen_nn, ArrayDataset
 except:
-    from net_torch import MFNetTorch, make_graph_2
+    from net_torch import MFNetTorch, make_graph_2, make_graph_2gen, make_graph_2gen_nn, ArrayDataset
 
 def nestgetattr(obj, name):
     """Nested getattr."""
@@ -39,7 +44,9 @@ def convert_to_pyro(model):
 
     Also sets all internal parameters to uncertain random variables (priors)
     """
+    # print(model)
     to_pyro_module_(model)
+    # print(model)
     names = []
     for name, param in model.named_parameters():
         # print(name, param)
@@ -64,17 +71,79 @@ def convert_to_pyro(model):
             # print(name, )
     # print("params after:", [name for name, _ in model.named_parameters()])
 
+def samples_to_pandas(samples):
+    """Convert the samples output of Pyro parameters to a pandas dataframe."""
+    hmc_samples = {k: v.detach().cpu().numpy() for k, v in samples.items()}
+    names = list(hmc_samples.keys())
+    param_dict = {}
+    # print(names)
+
+    obs_dict = {}
+    for key,val in samples.items():
+        val = val.squeeze()
+        
+        if val.dim() == 1:
+            val = val.reshape(val.size(dim=0), 1)
+
+        # print(key)
+        # print("\nval shape = ", val.shape)
+            
+
+        if 'obs' in key:
+            name = key.split('obs')
+            model_out = name[1].split("-")
+            new_name = f"model_{model_out[0]}_output_{model_out[1]}"
+            # print("val.shape = ", val.shape)
+            v = val.detach().numpy()
+            assert val.ndim == 2
+            for jj in range(v.shape[1]):
+                out_name = f"{new_name}_pred_at_input{jj}"
+                obs_dict[out_name] = v[:, jj]
+            
+        else:
+            name = key.split("modules_list.")
+            name = name[-1]
+            # v = val.detach().numpy()
+            # assert v.ndim == 2
+            for idx in itertools.product(*map(range, val.shape[1:])): # first dimension is samples
+
+                idx_str = "[{}]".format(",".join(map(str, idx)))
+                new_name = name + idx_str
+                if len(idx) == 1:
+                    v = val[:, idx[0]]
+                elif len(idx) == 2:
+                    v = val[:, idx[0], idx[1]]
+                else:
+                    print("not sure  dimension is larger than 2")
+                    # print("val shape = ", val.shape)
+                    exit(1)
+                # print("vv = ", v.shape)
+                param_dict[new_name] = v.detach().numpy()
+
+    # print(param_dict)
+    # print(list(param_dict.keys()))
+
+    df_params = pd.DataFrame(param_dict)
+    # print(df_params.columns)
+    # exit(1)
+    df_obs = pd.DataFrame(obs_dict)
+    # print(df)
+    # print(df.describe())
+    return df_params, df_obs
+    
+
 class MFNetProbModel(pyro.nn.PyroModule):
     """Probabilistic MFNet."""
     
-    def __init__(self, graph, roots, noise_var=1.0):
+    def __init__(self, graph, roots, noise_std=1.0, **kwargs):
         """Initialize Probabilistic MFNET."""
         super().__init__()
-        self.model = MFNetTorch(graph, roots)
-        self.sigma = noise_var
+        self.model = MFNetTorch(graph, roots, **kwargs)
+        # print(self.model)
+        self.sigma = noise_std
         convert_to_pyro(self.model)
         
-    def forward(self, x, targets, y=None):
+    def forward(self, x, targets, y=None, zero_noise=False):
         """Evaluate model."""
         # print("x = ", x)
         means = self.model(x, targets)
@@ -87,22 +156,27 @@ class MFNetProbModel(pyro.nn.PyroModule):
                 # print("xx size = ", xx.size())                
                 # with pyro.plate(f"data{ii+1}", xx.shape[0]):
                 #     obs = pyro.sample(f"obs{ii+1}", dist.Normal(m.flatten(), self.sigma), obs=None)
-                for jj in range(m.size(dim=1)):
-                    obs = pyro.sample(f"obs{targets[ii]}-{jj}",
-                                      dist.MultivariateNormal(m[:, jj],
-                                                              self.sigma * torch.eye(m.size(dim=0))), obs=None)
-                    # for kk in range(m.size(dim=1)):
-                    #     obs = pyro.sample(f"obs{ii+1}-{jj}-{kk}",
-                    #                       dist.Normal(m[jj, kk], self.sigma), obs=None)
+                if zero_noise is False:
+                    for jj in range(m.size(dim=1)):
+                        obs = pyro.sample(f"obs{targets[ii]}-{jj}",
+                                          dist.MultivariateNormal(
+                                              m[:, jj],
+                                              self.sigma * torch.eye(m.size(dim=0))), obs=None)
+                else:
+                    for jj in range(m.size(dim=1)):
+                        obs = pyro.sample(f"obs{targets[ii]}-{jj}", dist.Delta(m[:, jj]))
         else:            
             for ii, (m, xx, yy) in enumerate(zip(means, x, y)):
                 # print("m = ", m.size())
                 # print("xx size = ", xx.size())
                 # print("yy size = ", yy.size())
                 for jj in range(yy.size(dim=1)):
+                    
                     obs = pyro.sample(f"obs{ii+1}-{jj}",
                                       dist.MultivariateNormal(m[:, jj],
                                                               self.sigma * torch.eye(m.size(dim=0))), obs=yy[:, jj])
+                    # with pyro.plate(f"data{ii+1}-{jj}", yy.size(dim=0)):
+                    #     obs = pyro.sample(f"obs{ii+1}-{jj}", dist.Normal(m[:, jj], self.sigma), obs=yy[:, jj])
                     # for kk in range(yy.size(dim=1)):
                     # # print("m = ", m[jj, kk])
                     # # print("y = ", yy[jj, kk])
@@ -117,84 +191,68 @@ class MFNetProbModel(pyro.nn.PyroModule):
         # print("return?")
         return [m for m in means]
 
-def samples_to_pandas(samples):
-    """Convert the samples output of Pyro parameters to a pandas dataframe."""
-    hmc_samples = {k: v.detach().cpu().numpy() for k, v in samples.items()}
-    names = list(hmc_samples.keys())
-    new_dict = {}
-    # print(names)
-    for key,val in samples.items():
+    def train(self, data, targets, guide, num_steps=100, adam_lr=0.005, adam_betas=(0.95, 0.999)):
+        """ Train the model. 
 
-        val = val.squeeze()
+        Parameters
+        ----------
+        data: list of data loaders for the data associated with each node
+        targets: list of target nodes (same length as data) 
+        svi: pyro variational inference interface
+
+        Returns
+        -------
+        guide: the updated guide
+
+        """
+
+        adam_params = {"lr": adam_lr, "betas": adam_betas}    
+        optimizer = Adam(adam_params)
+        svi = SVI(self, guide, optimizer, loss=Trace_ELBO())
         
-        if val.dim() == 1:
-            val = val.reshape(val.size(dim=0), 1)
-        # print(key)
-        # print("\nval shape = ", val.shape)
-        if 'node' in key:
-            name = key.split('node')
+        X = [d.dataset.x for d in data]
+        Y = [d.dataset.y for d in data]
+        print_frac = 0.1
+        print_increment  = int(print_frac * num_steps)
+        for step in range(num_steps):
+            elbo = svi.step(X, targets, Y)
+            if step % print_increment == 0:
+                print(f"Iteration {step}\t Elbo loss: {elbo}")
 
-            for idx in itertools.product(*map(range, val.shape[1:])): # first dimension is samples
-                idx_str = "[{}]".format(",".join(map(str, idx)))
-                new_name = 'node' + name[-1] + idx_str
-                # print("name = ", new_name)
-                # print("idx = ", idx)
-                if len(idx) == 1:
-                    v = val[:, idx[0]]
-                elif len(idx) == 2:
-                    v = val[:, idx[0], idx[1]]
-                else:
-                    print("not sure whynode  dimension is larger than 2")
-                    # print("val shape = ", val.shape)
-                    exit(1)
-                # print("vv = ", v.shape)
-                new_dict[new_name] = v.detach().numpy()
+        return guide
 
-        if 'edge' in key:
-            name = key.split('edge')
-            for idx in itertools.product(*map(range, val.shape[1:])): # first dimension is samples
-                idx_str = "[{}]".format(",".join(map(str, idx)))
-                new_name = 'edge' + name[-1] + idx_str
-                # print("name = ", new_name)
-                # print("idx = ", idx)
-                if len(idx) == 1:
-                    v = val[:, idx[0]]
-                elif len(idx) == 2:
-                    v = val[:, idx[0], idx[1]]
-                else:
-                    print("not sure why dimension is larger than 2")
-                    exit(1)
-                # print("vv = ", v.shape)
-                new_dict[new_name] = v.detach().numpy()
+    def sample_pred(self, xpred, targets, guide, num_samples):
+        """Make predictions by sampling from the guide and running it through the model.
 
-    # print(new_dict)
-    # print(list(new_dict.keys()))
-
-    df = pd.DataFrame(new_dict)
-    # print(df)
-    # print(df.describe())
-    return df
+        Parameters
+        ----------
+        xpred: locations at which to predict
+        targets: list of target nodes (same length as xpred) 
+        guide: the guide used to generate samples
+        num_samples: the number of samples to generate
         
-if __name__ == "__main__":
+        Returns
+        -------
+        df_params: Pandas DataFrame of parameter samples
+        df_obs: Pandas DataFrame of output samples
+        """
 
-    import matplotlib.pyplot as plt
-    import seaborn as sns
-    import pandas as pd
+        predictive = Predictive(self, guide=guide, num_samples=num_samples)
+        pred = predictive(xpred, targets, zero_noise=True)
+        df_params, df_obs = samples_to_pandas(pred)
+        return df_params, df_obs
+        
+    def extract_model_output_from_samples(self, df_samples, model_num, output_num):
+        output_cols = df_samples.columns
 
-    from pyro.infer import MCMC, NUTS
-    from pyro.infer import Predictive
-    from pyro.optim import Adam
-    from pyro.infer import SVI, Trace_ELBO
-    from pyro.infer.autoguide import (
-        AutoDelta,
-        AutoNormal,
-        AutoMultivariateNormal,
-        AutoLowRankMultivariateNormal,
-        AutoGuideList,
-        AutoIAFNormal,
-        init_to_feasible,
-    )
+        desired_cols = [d for d in output_cols if f'model_{model_num}_output_{output_num}' in d]
+        df_out = df_samples[desired_cols]
 
+        return df_out.to_numpy()
+        
+    
+
+def run_single_output():
     
     torch.manual_seed(1)
 
@@ -294,4 +352,98 @@ if __name__ == "__main__":
 
     # pd.plotting.scatter_matrix(df, alpha=0.2, figsize=(6,6), diagonal='kde')
 
-    plt.show()    
+    plt.show()
+
+
+def run_multi_output_gen():
+    
+    torch.manual_seed(1)
+
+    pyro.clear_param_store()
+
+    # graph, roots = make_graph_2()
+    # model = MFNetProbModel(graph, roots, noise_std=1e-4)
+
+    # OR
+
+    graph, roots = make_graph_2gen()    
+    # graph, roots = make_graph_2gen_nn()
+    model = MFNetProbModel(graph, roots, noise_std=1e-4, edge_type="general")    
+
+    # exit(1)
+
+    x = torch.linspace(-1,1,40).reshape(40, 1)
+    targets = [1, 2]
+    num_models = len(targets)
+
+
+    # Plot Prior Predictive
+    plt.figure()
+    for ii in range(1000):
+        evals = model([x]*num_models, targets)
+        plt.plot(x, evals[0].flatten(), color='blue', alpha=0.2)
+        plt.plot(x, evals[1].flatten(), color='red', alpha=0.2)
+    plt.title("Prior predictive")
+    # plt.show()
+    # exit(1)
+
+    # data
+    data1 = x
+    data2 = 2*x**2 + x
+    data = (ArrayDataset(x.clone().detach(), data1), ArrayDataset(x.clone().detach(), data2))
+    data_loaders = [torch.utils.data.DataLoader(d, batch_size=len(d), shuffle=False)
+                    for d in data]
+    
+    # testing
+    xtest = torch.linspace(-1,1,100).reshape(100,1)
+
+
+    guide = AutoDelta(model) # DOESNT WORK
+    # guide = AutoNormal(model)
+    # guide = AutoMultivariateNormal(model)
+    # guide = AutoIAFNormal(model, hidden_dim=[20, 20, 20, 20, 20], num_transforms=10)
+    # guide = model.train(data_loaders, targets, guide, adam_lr=0.1, num_steps=200) # good for scale-shift
+    guide = model.train(data_loaders, targets, guide, adam_lr=0.01, num_steps=1000) # 1000 may be good for nn
+
+    num_samples = 1000
+    df_params, df_obs = model.sample_pred([xtest]*num_models, targets, guide, num_samples)
+
+    
+
+    print(df_params)
+    print(df_obs)
+
+    plt.figure()
+    model1_output = model.extract_model_output_from_samples(df_obs, 1, 0)
+    model2_output = model.extract_model_output_from_samples(df_obs, 2, 0)
+    plt.plot(xtest.flatten(), model1_output.T, 'red', alpha=0.2)
+    plt.plot(xtest.flatten(), xtest.flatten(), 'k-')
+
+    plt.plot(xtest.flatten(), model2_output.T, 'blue', alpha=0.2)
+    plt.plot(xtest.flatten(), 2*xtest.flatten()**2 + xtest.flatten(), 'k-')    
+    
+    pd.plotting.scatter_matrix(df_params, alpha=0.2, figsize=(6,6), diagonal='kde')
+
+    plt.show()        
+
+    
+if __name__ == "__main__":
+
+    import matplotlib.pyplot as plt
+    import seaborn as sns
+
+
+    from pyro.infer import MCMC, NUTS
+
+    from pyro.infer.autoguide import (
+        AutoDelta,
+        AutoNormal,
+        AutoMultivariateNormal,
+        AutoLowRankMultivariateNormal,
+        AutoGuideList,
+        AutoIAFNormal,
+        init_to_feasible,
+    )
+
+    # run_single_output()
+    run_multi_output_gen()
