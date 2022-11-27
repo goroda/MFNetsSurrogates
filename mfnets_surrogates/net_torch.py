@@ -30,22 +30,6 @@ class ArrayDataset(torch.utils.data.Dataset):
         """Get number of data points."""
         return self.x.size(dim=0)
 
-def make_graph_2():
-    """Make a graph with two nodes (scale and shift).
-
-    1 -> 2
-    """
-    graph = nx.DiGraph()
-
-    # pnodes = torch.randn((2, 2), device=device, dtype=dtype)
-    # pedges = torch.randn((1, 2), device=device, dtype=dtype)
-
-    dim_in = 1
-    graph.add_node(1, func=torch.nn.Linear(dim_in, 1, bias=True), dim_in=1)
-    graph.add_node(2, func=torch.nn.Linear(dim_in, 1, bias=True), dim_out=1)
-    graph.add_edge(1, 2, func=torch.nn.Linear(dim_in, 1, bias=True), out_rows=1, out_cols=1, dim_in=1)
-    return graph, set([1])
-
 class FeedForwardNet(nn.Module):
     """A flexible generalized model with fully connected layers"""
 
@@ -153,7 +137,39 @@ class LinearScaleShift(nn.Module):
         node_func = self.node(xinput)
 
         return edge_func + node_func
-        
+
+
+def make_graph_single():
+    """Make a graph with a single node
+
+    1
+    """
+    graph = nx.DiGraph()
+
+    # pnodes = torch.randn((2, 2), device=device, dtype=dtype)
+    # pedges = torch.randn((1, 2), device=device, dtype=dtype)
+
+    dim_in = 1
+    graph.add_node(1, func=FeedForwardNet(dim_in, 1, [10, 10]))
+    return graph, set([1])
+    
+def make_graph_2():
+    """Make a graph with two nodes (scale and shift).
+
+    1 -> 2
+    """
+    graph = nx.DiGraph()
+
+    # pnodes = torch.randn((2, 2), device=device, dtype=dtype)
+    # pedges = torch.randn((1, 2), device=device, dtype=dtype)
+
+    dim_in = 1
+    graph.add_node(1, func=torch.nn.Linear(dim_in, 1, bias=True), dim_in=1)
+    graph.add_node(2, func=torch.nn.Linear(dim_in, 1, bias=True), dim_out=1)
+    graph.add_edge(1, 2, func=torch.nn.Linear(dim_in, 1, bias=True), out_rows=1, out_cols=1, dim_in=1)
+    return graph, set([1])
+
+
 def make_graph_2gen():
     """Make a graph with two nodes (generalized scale-shift)
 
@@ -451,6 +467,17 @@ def generate_data(model, ndata):
     data = (d1, d2)
     return data
 
+def generate_data_1model(model, ndata):
+    """Generate data."""
+    
+    x = torch.rand(ndata, 1) * 6 - 3
+    with torch.no_grad():
+        y = model([x], [1])
+
+    d1 = ArrayDataset(x, y[0])
+    data = [d1]
+    return data
+
 def construct_loss_funcs(model):
     """Create loss functions."""
     num_nodes = len(model.graph.nodes)
@@ -467,11 +494,13 @@ def plot_funcs(model, x, data=None, title=None):
         
     plt.figure()
     plt.plot(x, y[0], label='low-fidelity')
-    plt.plot(x, y[1], label='high-fidelity')
+    if nnodes > 1:
+        plt.plot(x, y[1], label='high-fidelity')
 
     if data != None:
         plt.plot(data[0].x, data[0].y, 'ro', label='Low-fidelity Data')
-        plt.plot(data[1].x, data[1].y, 'ko', label='High-fidelity Data')
+        if nnodes > 1:
+            plt.plot(data[1].x, data[1].y, 'ko', label='High-fidelity Data')
 
     if title is not None:
         plt.title(title)
@@ -491,7 +520,6 @@ def run_scale_shift():
     x = torch.linspace(-3, 3, 10).reshape(10, 1)
     plot_funcs(model, x)
 
-    loss_fns = construct_loss_funcs(model)
     data = generate_data(model, [20, 20])
     data_loaders = [torch.utils.data.DataLoader(d, batch_size=len(d), shuffle=False)
                     for d in data]
@@ -501,6 +529,7 @@ def run_scale_shift():
     model_trained = MFNetTorch(graph2, root2)
     plot_funcs(model_trained, x)
 
+    loss_fns = construct_loss_funcs(model_trained)    
     model_trained.train(data_loaders, [1, 2], loss_fns)
 
     plot_funcs(model_trained, x, data)
@@ -532,7 +561,7 @@ def run_generalized():
     x = torch.linspace(-3, 3, 10).reshape(10, 1)
     plot_funcs(model, x, title="True Model")
 
-    loss_fns = construct_loss_funcs(model)
+
     data = generate_data(model, [20, 20])
     data_loaders = [torch.utils.data.DataLoader(d, batch_size=len(d), shuffle=False)
                     for d in data]
@@ -542,6 +571,7 @@ def run_generalized():
     model_trained = MFNetTorch(graph2, root2, edge_type="general")
     plot_funcs(model_trained, x, title="Un-trained initial mfnet")
 
+    loss_fns = construct_loss_funcs(model_trained)
     model_trained.train(data_loaders, [1, 2], loss_fns)
 
     plot_funcs(model_trained, x, data, title="Trained mfnet")
@@ -573,7 +603,7 @@ def run_generalized_nn():
     x = torch.linspace(-3, 3, 10).reshape(10, 1)
     plot_funcs(model, x, title="True Model")
 
-    loss_fns = construct_loss_funcs(model)
+
     data = generate_data(model, [20, 20])
     data_loaders = [torch.utils.data.DataLoader(d, batch_size=len(d), shuffle=False)
                     for d in data]
@@ -581,6 +611,7 @@ def run_generalized_nn():
 
     graph2, root2 = make_graph_2gen_nn()
     model_trained = MFNetTorch(graph2, root2, edge_type="general")
+    loss_fns = construct_loss_funcs(model_trained)
     plot_funcs(model_trained, x, title="Un-trained initial mfnet")
 
     model_trained.train(data_loaders, [1, 2], loss_fns)
@@ -591,15 +622,58 @@ def run_generalized_nn():
         loss2 = model_trained.eval_loss(data_loaders, [1, 2], loss_fns)
         print("loss2 = ", loss2)
         print(model_trained)
-        print("Trained parameters")
-        print(torch.nn.utils.parameters_to_vector(model_trained.parameters()))
-        print("True parameters")
-        print(torch.nn.utils.parameters_to_vector(model.parameters()))
+        # print("Trained parameters")
+        # print(torch.nn.utils.parameters_to_vector(model_trained.parameters()))
+        # print("True parameters")
+        # print(torch.nn.utils.parameters_to_vector(model.parameters()))
         
     plt.show()
+
+
+def run_single_fidelity():
+
+    
+    torch.manual_seed(1)
+    graph, root = make_graph_single() # train with non nn
+
+    model = MFNetTorch(graph, root, edge_type="general")
+
+    # val = model.eval_target_node_general_(torch.Tensor([0.2]), 2)
+    # print("val = ", val)
+    # exit()    
+
+    x = torch.linspace(-3, 3, 10).reshape(10, 1)
+    plot_funcs(model, x, title="True Model")
+
+
+    data = generate_data_1model(model, 20)
+    data_loaders = [torch.utils.data.DataLoader(d, batch_size=len(d), shuffle=False)
+                    for d in data]
+
+
+    graph2, root2 = make_graph_single()
+    model_trained = MFNetTorch(graph2, root2, edge_type="general")
+    loss_fns = construct_loss_funcs(model_trained)
+    plot_funcs(model_trained, x, title="Un-trained initial mfnet")
+
+    model_trained.train(data_loaders, [1], loss_fns)
+
+    plot_funcs(model_trained, x, data, title="Trained mfnet")
+
+    with torch.no_grad():
+        loss2 = model_trained.eval_loss(data_loaders, [1], loss_fns)
+        print("loss2 = ", loss2)
+        print(model_trained)
+        # print("Trained parameters")
+        # print(torch.nn.utils.parameters_to_vector(model_trained.parameters()))
+        # print("True parameters")
+        # print(torch.nn.utils.parameters_to_vector(model.parameters()))
+        
+    plt.show()    
     
 if __name__ == "__main__":
     import matplotlib.pyplot as plt
     # run_scale_shift()
     # run_generalized()
-    run_generalized_nn()
+    # run_generalized_nn()
+    run_single_fidelity()
