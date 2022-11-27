@@ -119,17 +119,29 @@ def parse_graph(input_spec, model_info):
 
     try:
         with open(graph_file) as f:
-            edge_list = f.read().splitlines()
+            graph_read = f.read().splitlines()
     except FileNotFoundError:
         print(f"Cannot open file {graph_file}")
         exit(1)
 
-    graph = fill_graph(nx.parse_edgelist(edge_list, create_using=nx.DiGraph, nodetype=int), input_spec, model_info)
+    structure_format = "edge list"
+    if "structure_format" in input_spec['graph']:
+        structure_format = input_spec['graph']['structure_format']
+    logging.info(f"Graph file type: {structure_format}")
+    if structure_format == "edge list":
+        graph = fill_graph(nx.parse_edgelist(graph_read, create_using=nx.DiGraph, nodetype=int), input_spec, model_info)
+    elif structure_format == "adjacency list":
+        graph = fill_graph(nx.parse_adjlist(graph_read, create_using=nx.DiGraph, nodetype=int), input_spec, model_info)
+    else:
+        logging.error(f"File type unrecognized")
+        exit(1)
+
+    # print(graph)
         
     roots = set([x for x in graph.nodes() if graph.in_degree(x) == 0])
 
     logging.info(f"Root models: {roots}")
-    
+    # exit(1)
     return graph, roots
 
 def parse_model_info(args):

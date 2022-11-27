@@ -103,7 +103,8 @@ def make_graph_4gen_nn():
                                                 hidden_layer_sizes=[100,
                                                                     100,
                                                                     100,
-                                                                    100]))
+                                                                    20]))
+    
 
     graph.add_edge(1, 4)
     graph.add_edge(2, 4)
@@ -113,7 +114,7 @@ def make_graph_4gen_nn():
     return graph, roots, dim_out
 
 
-class TestMfnet(unittest.TestCase):
+class TestMfnetPyro(unittest.TestCase):
 
     # @unittest.skip('testing other')
     def test_least_squares_opt(self):
@@ -309,7 +310,7 @@ class TestMfnet(unittest.TestCase):
                                                     shuffle=False)]
         # print(mfsurr_learn)
         mfsurr_learn.train(data_loaders, [node], loss_fns[(node-1):],
-                           max_iter=1000)
+                           max_iter=500)
 
         print("\n")
         with torch.no_grad():
@@ -332,5 +333,5 @@ class TestMfnet(unittest.TestCase):
             assert err<1e-3
         
 if __name__== "__main__":    
-    mfnet_test_suite = unittest.TestLoader().loadTestsFromTestCase(TestMfnet)
-    unittest.TextTestRunner(verbosity=2).run(mfnet_test_suite)
+    mfnet_pyro_test_suite = unittest.TestLoader().loadTestsFromTestCase(TestMfnetPyro)
+    unittest.TextTestRunner(verbosity=2).run(mfnet_pyro_test_suite)

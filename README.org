@@ -18,6 +18,7 @@ This library depends on
 - [[https://sandialabs.github.io/pyapprox/index.html][PyApprox]] (optional for L1 regularization)
 - [[https://pytorch.org][PyTorch]]
 - [[https://pyro.ai][Pyro]]
+- Pandas
 
 ** Usage
 
@@ -365,9 +366,11 @@ Please cite the following paper if you find this code to be useful
 ** TODOS 
    - Add unit tests for the Pyro interface 
    - Ensure multi-output works with Pyro
-   - Ensure generalized edge connections work with pyro
+   - Update cmdline_yaml with the pyro interface 
+   - Add a simpler MCMC interface for pyro
    - Update README with the new interface.
-   - CMDLINE_YAML has scaling setup for the regression, but need to set it up for the sampling
+   - cmdline_yaml has scaling setup for the regression, but need to set it up for the sampling
+   - Training for the MAP estimate with AutoDelta doesnt work
 ** More information
 
  Author: Alex Gorodetsky 
