@@ -314,9 +314,8 @@ if __name__ == "__main__":
         logging.info("Running Bayesian Inference")
         noise_var = float(input_spec['algorithm']['noise_var'])
 
-        model = net_pyro.MFNetProbModel(graph, roots, 
-                                        edge_type=input_spec['graph']['connection_type'],
-                                        noise_var=noise_var,)
+        model = net_pyro.MFNetProbModel(graph, roots, noise_var=noise_var,
+                                        edge_type=input_spec['graph']['connection_type'],)
 
         alg = input_spec['algorithm']['parameterization']
 

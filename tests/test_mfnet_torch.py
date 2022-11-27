@@ -96,14 +96,14 @@ def make_graph_4gen_nn():
     graph.add_node(1, func=torch.nn.Linear(dim_in, dim_out[0], bias=True))
     graph.add_node(2, func=FullyConnectedNNEdge(dim_in, dim_out[1], dim_out[2],
                                                 hidden_layer_sizes=[100, 100,
-                                                                    20, 20]))
+                                                                    100, 100]))
     graph.add_node(3, func=torch.nn.Linear(dim_in, dim_out[2], bias=True))
     graph.add_node(4, func=FullyConnectedNNEdge(dim_in, dim_out[3],
                                                 dim_out[0]+dim_out[1],
                                                 hidden_layer_sizes=[100,
                                                                     100,
-                                                                    20,
-                                                                    20]))
+                                                                    100,
+                                                                    100]))
     
 
     graph.add_edge(1, 4)
@@ -116,7 +116,7 @@ def make_graph_4gen_nn():
 
 class TestMfnet(unittest.TestCase):
 
-    @unittest.skip('testing other')
+    # @unittest.skip('testing other')
     def test_least_squares_opt(self):
         torch.manual_seed(2)
 
@@ -162,7 +162,7 @@ class TestMfnet(unittest.TestCase):
             print("err = ", err)
             assert err<1e-3
 
-    @unittest.skip('testing other')
+    # @unittest.skip('testing other')
     def test_least_squares_opt_multi_out(self):
         torch.manual_seed(2)
 
@@ -217,7 +217,7 @@ class TestMfnet(unittest.TestCase):
             print("err = ", err)
             assert err<1e-3
 
-    @unittest.skip('testing other')
+    # @unittest.skip('testing other')
     def test_least_squares_opt_multi_out_gen(self):
         torch.manual_seed(2)
 
@@ -310,7 +310,7 @@ class TestMfnet(unittest.TestCase):
                                                     shuffle=False)]
         # print(mfsurr_learn)
         mfsurr_learn.train(data_loaders, [node], loss_fns[(node-1):],
-                           max_iter=500)
+                           max_iter=1000)
 
         print("\n")
         with torch.no_grad():
