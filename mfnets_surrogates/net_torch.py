@@ -1,5 +1,6 @@
 """MFnets using pytorch."""
 import itertools
+import copy
 
 import torch
 import torch.utils
@@ -88,6 +89,62 @@ class FullyConnectedNNEdge(nn.Module):
 
         xin = torch.cat((xinput, parent_vals), dim=-1)
         return self.node(xin)
+
+class EqualModelAverageEdge(nn.Module):
+    """The edge model averages the parent model values and then learns a discrepancy."""
+
+    def __init__(self, dim_in, dim_out, num_parents, model):
+        """Initialize the LinearScaleShift node for the MFNET
+
+        f_{j} = \frac{1}{num_parents} \sum  f_{i} + delta_j(x)
+
+        Parameters
+        ----------
+        dim_in : integer 
+            Dimension of the input space 
+
+        dim_out : integer 
+            Dimension of the output space 
+        
+        num_parents : integer 
+            Number of parents.
+
+        model : PytorchModule
+            Represents the node model
+
+        Note
+        ----
+        The parents *must* have equal number of outputs as the current node
+        """
+        super().__init__()
+        
+        self.dim_out = dim_out
+        self.num_parents = num_parents
+        
+        # edge model
+        self.node = copy.deepcopy(model)
+        
+    def forward(self, xinput, parent_vals):
+        """Evaluate the fully connected NN model."""
+
+        # print("xin.shape = ", xinput.shape)
+        out1 = self.node(xinput)
+        # print("parent_vals.shape = ", parent_vals.shape)
+        # print("out1.shape = ", out1.shape)
+        # print(self.dim_out)
+        out2 = 0.0
+        start = 0
+        end = self.dim_out
+        for ii in range(self.num_parents):
+            out2 += parent_vals[:, start:end]
+            start = end
+            end = start + self.dim_out
+            
+        # print("out2 shape = ", out2.shape)
+        # exit(1)
+        out = out1 + out2
+
+        return out    
 
 class LinearScaleShift(nn.Module):
     """A generalized scale and shift operator for the MFNET"""
@@ -207,6 +264,28 @@ def make_graph_2gen_nn():
     graph.add_edge(1, 2)
     return graph, set([1])
 
+def make_graph_2gen_nn_fixed():
+    """Make a graph with two nodes (generalized neural network) with a fixed edge
+
+    1 -> 2
+    """
+    graph = nx.DiGraph()
+
+    # pnodes = torch.randn((2, 2), device=device, dtype=dtype)
+    # pedges = torch.randn((1, 2), device=device, dtype=dtype)
+
+    dim_in = 1
+    dim_out1 = 1
+    dim_out2 = 1
+    graph.add_node(1, func=FeedForwardNet(dim_in, dim_out1, [10, 10]))
+    graph.add_node(2, func=EqualModelAverageEdge(dim_in, dim_out2, 1, 
+                                                 FeedForwardNet(dim_in,
+                                                                dim_out2,
+                                                                [10, 10])))
+                                                 
+    graph.add_edge(1, 2)
+    return graph, set([1])
+
 
 class MFNetTorch(nn.Module):
     """Multifidelity Network."""
@@ -274,7 +353,7 @@ class MFNetTorch(nn.Module):
 
             # need to flatten
             parent_evals = torch.cat([self.graph.nodes[p]['eval'] for p in parents], dim=-1)
-            # print(parent_evals.size())
+            # print("parent size = ", parent_evals.size())
             # print(xinput.size())
             pval = self.graph.nodes[node]['func'](xinput, parent_evals)
             self.graph.nodes[node]['eval'] = pval
@@ -630,6 +709,47 @@ def run_generalized_nn():
     plt.show()
 
 
+def run_generalized_nn_fixed_edge():
+
+    torch.manual_seed(1)
+    graph, root = make_graph_2gen_nn_fixed() # train with non nn
+
+    model = MFNetTorch(graph, root, edge_type="general")
+
+    # val = model.eval_target_node_general_(torch.Tensor([0.2]), 2)
+    # print("val = ", val)
+    # exit()    
+
+    x = torch.linspace(-3, 3, 10).reshape(10, 1)
+    plot_funcs(model, x, title="True Model")
+
+
+    data = generate_data(model, [20, 20])
+    data_loaders = [torch.utils.data.DataLoader(d, batch_size=len(d), shuffle=False)
+                    for d in data]
+
+
+    graph2, root2 = make_graph_2gen_nn_fixed()
+    model_trained = MFNetTorch(graph2, root2, edge_type="general")
+    loss_fns = construct_loss_funcs(model_trained)
+    plot_funcs(model_trained, x, title="Un-trained initial mfnet")
+
+    model_trained.train(data_loaders, [1, 2], loss_fns)
+
+    plot_funcs(model_trained, x, data, title="Trained mfnet")
+
+    with torch.no_grad():
+        loss2 = model_trained.eval_loss(data_loaders, [1, 2], loss_fns)
+        print("loss2 = ", loss2)
+        print(model_trained)
+        # print("Trained parameters")
+        # print(torch.nn.utils.parameters_to_vector(model_trained.parameters()))
+        # print("True parameters")
+        # print(torch.nn.utils.parameters_to_vector(model.parameters()))
+        
+    plt.show()    
+
+
 def run_single_fidelity():
 
     
@@ -676,4 +796,5 @@ if __name__ == "__main__":
     # run_scale_shift()
     # run_generalized()
     # run_generalized_nn()
-    run_single_fidelity()
+    # run_single_fidelity()
+    run_generalized_nn_fixed_edge()
