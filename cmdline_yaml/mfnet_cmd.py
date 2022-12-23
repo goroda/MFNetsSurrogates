@@ -91,7 +91,24 @@ def fill_graph(graph, input_spec, model_info):
                 for model in input_spec['graph']['connection_models']:
                     if model['name'] == node:
                         logging.info(f"Regular node with type: {model['node_type']}")
-                        if model['edge_type'] != 'model_average':
+                        if model['edge_type'] == 'equal_model_average':
+                            logging.info(f"Processing model averaged edge")
+                            if model['node_type'] == "linear":
+                                graph.nodes[node]['func'] = \
+                                    net.EqualModelAverageEdge(dim_in, dim_out,
+                                                              num_inputs_parents,
+                                                              torch.nn.Linear(dim_in, dim_out, bias=True))
+                            elif model['node_type'] == "feedforward":
+                                hidden_layer = model['hidden_layers']
+                                logging.info(f'Feedforward with hidden layer sizes: {hidden_layer}')
+                                graph.nodes[node]['func'] = \
+                                    net.EqualModelAverageEdge(dim_in, dim_out,
+                                                              num_inputs_parents,
+                                                              net.FeedForwardNet(dim_in, dim_out,
+                                                                           hidden_layer_sizes=hidden_layer))
+                            else:
+                                raise Exception(f"Node type {model.node_type} unknown")
+                        else:
                             logging.info(f"Processing learned edge")
                             if model['node_type'] == "linear":
                                 graph.nodes[node]['func'] = net.LinearScaleShift(dim_in, dim_out, num_inputs_parents)
@@ -103,24 +120,6 @@ def fill_graph(graph, input_spec, model_info):
                                                                                      hidden_layer_sizes=hidden_layer)
                             else:
                                 raise Exception(f"Node type {model.node_type} unknown")
-                        else:
-                            logging.info(f"Processing model averaged edge")
-                            if model['node_type'] == "linear":
-                                graph.nodes[node]['func'] = \
-                                    net.FixedModelAverageEdge(dim_in, dim_out,
-                                                              num_inputs_parents,
-                                                              torch.nn.Linear(dim_in, dim_out, bias=True))
-                            elif model['node_type'] == "feedforward":
-                                hidden_layer = model['hidden_layers']
-                                logging.info(f'Feedforward with hidden layer sizes: {hidden_layer}')
-                                graph.nodes[node]['func'] = \
-                                    net.FixedModelAverageEdge(dim_in, dim_out,
-                                                              num_inputs_parents,
-                                                              net.FeedForwardNet(dim_in, dim_out,
-                                                                           hidden_layer_sizes=hidden_layer))
-                            else:
-                                raise Exception(f"Node type {model.node_type} unknown")
-
 
                 
             graph.nodes[node]['dim_in'] = dim_in

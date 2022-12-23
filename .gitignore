@@ -14,6 +14,7 @@ mfnets_surrogates/multinormal_test_results/
 *.pyc
 
 cmdline_yaml/example_results
+cmdline_yaml/example_results_modelavg
 cmdline_yaml/example_results_mo
 cmdline_yaml/example_results_mo_gen
 cmdline_yaml/example_results_mo_gen_single_fidelity
