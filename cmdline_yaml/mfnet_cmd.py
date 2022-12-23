@@ -69,8 +69,11 @@ def fill_graph(graph, input_spec, model_info):
             dim_out = model_info[node].dim_out
             # print(list(graph.predecessors(node)
             num_inputs_parents = np.sum([model_info[p].dim_out for p in graph.predecessors(node)])
-
+            num_parents = len([p for p in graph.predecessors(node)])
+            
             logging.info(f'Assigning model for node {node}')
+            logging.info(f'Number of parents for node {node} = {num_parents}')
+            exit(1)
             # so far only use linear functions to test interface
             if num_inputs_parents == 0:
                 for model in input_spec['graph']['connection_models']:
@@ -96,14 +99,14 @@ def fill_graph(graph, input_spec, model_info):
                             if model['node_type'] == "linear":
                                 graph.nodes[node]['func'] = \
                                     net.EqualModelAverageEdge(dim_in, dim_out,
-                                                              num_inputs_parents,
+                                                              num_parents,
                                                               torch.nn.Linear(dim_in, dim_out, bias=True))
                             elif model['node_type'] == "feedforward":
                                 hidden_layer = model['hidden_layers']
                                 logging.info(f'Feedforward with hidden layer sizes: {hidden_layer}')
                                 graph.nodes[node]['func'] = \
                                     net.EqualModelAverageEdge(dim_in, dim_out,
-                                                              num_inputs_parents,
+                                                              num_parents,
                                                               net.FeedForwardNet(dim_in, dim_out,
                                                                            hidden_layer_sizes=hidden_layer))
                             else:
