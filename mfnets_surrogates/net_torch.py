@@ -139,7 +139,8 @@ class EqualModelAverageEdge(nn.Module):
             out2 += parent_vals[:, start:end]
             start = end
             end = start + self.dim_out
-            
+
+        out2 /= float(self.num_parents)
         # print("out2 shape = ", out2.shape)
         # exit(1)
         out = out1 + out2
