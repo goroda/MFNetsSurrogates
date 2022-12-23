@@ -73,7 +73,7 @@ def fill_graph(graph, input_spec, model_info):
             
             logging.info(f'Assigning model for node {node}')
             logging.info(f'Number of parents for node {node} = {num_parents}')
-            exit(1)
+            # exit(1)
             # so far only use linear functions to test interface
             if num_inputs_parents == 0:
                 for model in input_spec['graph']['connection_models']:
