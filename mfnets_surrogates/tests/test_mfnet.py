@@ -1,4 +1,6 @@
 import unittest
+import networkx as nx
+
 from mfnets_surrogates.net import *
 
 def make_graph_2():
@@ -228,3 +230,4 @@ class TestMfnet(unittest.TestCase):
 if __name__== "__main__":    
     mfnet_test_suite = unittest.TestLoader().loadTestsFromTestCase(TestMfnet)
     unittest.TextTestRunner(verbosity=2).run(mfnet_test_suite)
+

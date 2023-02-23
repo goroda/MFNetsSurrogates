@@ -3,6 +3,8 @@
 import functools
 import itertools
 
+import pandas as pd
+
 import torch
 
 import pandas as pd
@@ -14,10 +16,21 @@ import pyro
 import pyro.distributions as dist
 from pyro.nn.module import to_pyro_module_
 
-try: 
-    from .net_torch import MFNetTorch, make_graph_2, make_graph_2gen, make_graph_2gen_nn, ArrayDataset
-except:
-    from net_torch import MFNetTorch, make_graph_2, make_graph_2gen, make_graph_2gen_nn, ArrayDataset
+# from mfnets_surrogates import net_torch as net
+from mfnets_surrogates.net_torch import MFNetTorch, make_graph_2, make_graph_2gen, make_graph_2gen_nn, ArrayDataset
+
+# from pandas.tools.plotting import scatter_matrix
+# import pandas.tools.plotting as pandaplot
+# try: 
+#     from .net_torch import MFNetTorch, make_graph_2, make_graph_2gen, make_graph_2gen_nn, ArrayDataset
+# except:
+
+
+__all__ = [
+    "MFNetProbModel",
+    "samples_to_pandas"
+]
+    
 
 def nestgetattr(obj, name):
     """Nested getattr."""
@@ -245,6 +258,7 @@ class MFNetProbModel(pyro.nn.PyroModule):
     def extract_model_output_from_samples(self, df_samples, model_num, output_num):
         output_cols = df_samples.columns
 
+
         desired_cols = [d for d in output_cols if f'model_{model_num}_output_{output_num}' in d]
         df_out = df_samples[desired_cols]
 
@@ -444,6 +458,7 @@ if __name__ == "__main__":
         AutoIAFNormal,
         init_to_feasible,
     )
+
 
     # run_single_output()
     run_multi_output_gen()
