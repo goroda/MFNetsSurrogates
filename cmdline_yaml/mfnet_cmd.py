@@ -31,7 +31,8 @@ from pyro.infer.autoguide import (
 import pandas as pd
 
 import logging
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(level=logging.INFO, filename="log.log")
+logging.FileHandler("log.log", 'w+')
 
 ModelTrainData = namedtuple('ModelTrainData', ('train_in', 'train_out', 'dim_in', 'dim_out', 'output_dir'))
 
@@ -329,8 +330,8 @@ if __name__ == "__main__":
 
 
         ## Train
-        model.train(data_loaders, target_nodes, loss_fns)
-
+        obj_func = model.train(data_loaders, target_nodes, loss_fns)
+        logging.info(f"Model Loss: {obj_func}")
         ## Evaluate and save to file
         for node in graph.nodes:
             test_pts = model_test_inputs[node]
@@ -488,4 +489,6 @@ if __name__ == "__main__":
 
         # df = pd.read_csv(sample_filename)
         # print(df.describe())
-            
+
+        # Print out the objective function
+        print(obj_func)

@@ -544,6 +544,7 @@ class MFNetTorch(nn.Module):
         self.zero_grad()
 
         optimizer.step(closure)
+        return self.eval_loss(data, targets, loss_fns)
 
         
 def generate_data(model, ndata):
