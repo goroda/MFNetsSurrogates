@@ -10,7 +10,6 @@ mfnets_surrogates/iafflow_test_results/
 mfnets_surrogates/mcmc_test_results/
 mfnets_surrogates/mcmc_test_results_backup/
 mfnets_surrogates/multinormal_test_results/
-<<<<<<< HEAD
 *#*
 *.pyc
 
@@ -19,12 +18,11 @@ cmdline_yaml/example_results_modelavg
 cmdline_yaml/example_results_mo
 cmdline_yaml/example_results_mo_gen
 cmdline_yaml/example_results_mo_gen_single_fidelity
+cmdline_yaml/example_results_no_edges
 
 *dist*
 *egg*
 backup*
 
-=======
-
 *egg*
->>>>>>> origin
+

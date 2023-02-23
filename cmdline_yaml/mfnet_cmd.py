@@ -38,6 +38,13 @@ ModelTrainData = namedtuple('ModelTrainData', ('train_in', 'train_out', 'dim_in'
 def fill_graph(graph, input_spec, model_info):
     """Assign node and edge functions."""
 
+    # add nodes that were not included in the edge list
+    model_names = list(model_info.keys())
+    for name in model_names:
+        if name not in graph.nodes:
+            graph.add_node(name)
+
+    
     if input_spec['graph']['connection_type'] == 'scale-shift':
         logging.info('Scale-shift edge functions are used')
         for node in graph.nodes:
@@ -158,8 +165,7 @@ def parse_graph(input_spec, model_info):
         logging.error(f"File type unrecognized")
         exit(1)
 
-    # print(graph)
-        
+
     roots = set([x for x in graph.nodes() if graph.in_degree(x) == 0])
 
     logging.info(f"Root models: {roots}")
@@ -314,12 +320,13 @@ if __name__ == "__main__":
         #################
         ## Pytorch
         model = net.MFNetTorch(graph, roots, edge_type=input_spec['graph']['connection_type'])
-
+        logging.info(f"Model: {model}")
+        
         ## Training Setup
         loss_fns = net.construct_loss_funcs(model)
 
         data_loaders, scalers_in, scalers_out = model_info_to_dataloaders(model_info, graph.nodes)
-        
+
 
         ## Train
         model.train(data_loaders, target_nodes, loss_fns)
