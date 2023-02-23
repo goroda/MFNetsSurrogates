@@ -1,5 +1,7 @@
 import unittest
-from net import *
+import networkx as nx
+
+from mfnets_surrogates.net import *
 
 def make_graph_2():
     """Make a graph with two nodes

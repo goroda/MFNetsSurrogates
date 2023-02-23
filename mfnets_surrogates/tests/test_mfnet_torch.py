@@ -1,7 +1,9 @@
 import unittest
-from net_torch import *
 import numpy as np
 import torch
+import networkx as nx
+
+from mfnets_surrogates.net_torch import *
 
 def make_graph_8():
     """A graph with 8 nodes.

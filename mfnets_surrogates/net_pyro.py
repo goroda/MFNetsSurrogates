@@ -2,9 +2,6 @@
 
 import functools
 import itertools
-
-import matplotlib.pyplot as plt
-import seaborn as sns
 import pandas as pd
 
 import torch
@@ -26,7 +23,12 @@ from pyro.infer.autoguide import (
     init_to_feasible,
 )
 
-import net_torch as net
+from mfnets_surrogates import net_torch as net
+
+__all__ = [
+    "MFNetProbModel",
+    "samples_to_pandas"
+]
 
 # from pandas.tools.plotting import scatter_matrix
 # import pandas.tools.plotting as pandaplot
@@ -166,6 +168,8 @@ def samples_to_pandas(samples):
         
 if __name__ == "__main__":
 
+    import matplotlib.pyplot as plt
+    
     torch.manual_seed(1)
 
     pyro.clear_param_store()
@@ -264,4 +268,4 @@ if __name__ == "__main__":
 
     pd.plotting.scatter_matrix(df, alpha=0.2, figsize=(6,6), diagonal='kde')
 
-plt.show()    
+    plt.show()    

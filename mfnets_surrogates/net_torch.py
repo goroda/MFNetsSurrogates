@@ -15,6 +15,11 @@ import matplotlib.pyplot as plt
 # dtype = torch.float
 device = torch.device("cpu")
 
+__all__ = [
+    "ArrayDataset",
+    "MFNetTorch",
+    "construct_loss_funcs"
+]
 
 class ArrayDataset(torch.utils.data.Dataset):
     """Dataset from an array of data."""
