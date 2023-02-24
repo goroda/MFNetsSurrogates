@@ -1,98 +1,90 @@
-import os
-import sys
-import copy
+import matplotlib.pyplot as plt
 import networkx as nx
 import gslearn as gsl
-import subprocess 
-sys.path.append("../../cmdline_yaml")
+from fileops import get_graph_loss
 
-RESULTS_DIR_BASE="./results"
+import datautils
 
-template_file="templates/template.yaml"
-with open(template_file, 'r') as file:
-    template_str = file.read()
+def init_empty_graph():
+    graph = nx.DiGraph()
+    for ii in range(0, 4):
+        graph.add_node(ii)
 
-def gen_input_file(graph_file_name):
-
-    new_str = copy.deepcopy(template_str)
-    new_str = new_str.replace("GRAPH_FILE_TEMP", graph_file_name)
-    return new_str
-
-def graph_to_dirname(graph_gsl):
-
-    dirname = graph_gsl.incidence_matrix.tobytes().hex()
-    return dirname
-    
-def gen_new_directory(graph_gsl):
-    
-    results_dir = os.path.join(RESULTS_DIR_BASE, graph_to_dirname(graph_gsl))
-    os.makedirs(results_dir, exist_ok=True)
-    return results_dir
-
-def write_input_file(graph, dirname):
-
-    filename = os.path.join(dirname, "edges.edge_list")
-    net = graph.to_networkx()
-    nx.write_edgelist(net, filename, data=False)
-    new_str = gen_input_file("edges.edge_list")
-    input_filename = os.path.join(dirname, "input.yaml")
-    with open(input_filename, 'w') as file:
-        file.write(new_str)
-    
-def dirname_to_graph(dirname):
-
-    _, graph_encode = dirname.split("results/")
-    graph = gsl.Graph.from_incidence_matrix_buffer(bytes.fromhex(graph_encode))
     return graph
 
-def run(dirname):
+def run_test(data_dir_name):
 
-    cwd = os.getcwd()
-    # print(cwd)
-    # print(dirname)
-    fullpath = os.path.join(cwd, dirname)
-    # print(fullpath)
-    os.chdir(fullpath)
-    out = subprocess.run(["ls", "-l"], capture_output=True, text=True)
-    # out = subprocess.run(["ls", "-l"], capture_output=True, text=True)    
-    # print(out)
+    loss_fn = lambda g : get_graph_loss(g, data_dir_name)
 
-    # print("\n\n\n")
-    out = subprocess.run(["python", "../../../../cmdline_yaml/mfnet_cmd.py", "input.yaml"], capture_output=True, text=True)
-    # print(out)
-
-    with open("log.log") as f:
-        logfile = f.readlines()
-        for k, line in enumerate(logfile):
-            if line.find("INFO:root:Model Loss:") != -1:
-                _, loss = line.split("Model Loss:")
-                loss = float(loss)
-                # print(line)
-    
-    os.chdir(cwd)
-    # out = subprocess.run(["ls", "-l"], capture_output=True, text=True)
-    # print(out)
-    cwd = os.getcwd()
-    # print(cwd)
-    # print("LOSS = ", loss)
-    return loss
-
-if __name__ == "__main__":
-    
-    # print(template_str)
-
-    graph = nx.DiGraph()
-    for ii in range(0, 2):
-        graph.add_node(ii)
-    graph.add_edge(0,1)
+    graph = init_empty_graph()
+    graph.add_edge(0,3)
+    # graph.add_edge(1,3)
+    graph.add_edge(2,1)
 
     graph_gsl = gsl.Graph.from_networkx(graph)
 
-    dirname = gen_new_directory(graph_gsl)
-    write_input_file(graph_gsl, dirname)
-    loss = run(dirname)
+    graph_bin = graph_gsl.incidence_matrix.tobytes()
+
+    # very fast when cached!
+    loss = loss_fn(graph_bin)
     print("loss = ", loss)
-    #dirname_to_graph(dirname)
+    loss = loss_fn(graph_bin)
+    print("loss = ", loss)
+    loss = loss_fn(graph_bin)    
+    print("loss = ", loss)
+
+def run_sampling(data_dir_name):
+
+    
+    log_score = lambda g : -get_graph_loss(g.incidence_matrix.tobytes(), data_dir_name)*1e10
+
+    num_nodes = 4
+
+    nsamples = 2000
+    burnin = 1000
+
+    num_graphs_hist = 20     # include in histogram
+    num_edges_hist = 20    # include in histogram
+    num_graphs = 10 # visualize    
+
+    graph = init_empty_graph()
+    # graph.add_edge(0,3)
+    # graph.add_edge(1,3)
+    # graph.add_edge(2,1)
+    
+    dag_learn = gsl.DAGLearning(num_nodes, initial_graph=gsl.Graph.from_networkx(graph))
+    prior = gsl.DAGLearning.Prior.UNIFORM
+    trace = dag_learn.gen_scored_samples(nsamples, external_score=log_score, prior=prior)
+    trace.burnin(burnin)
+    graph_counts = trace.unique_graph_counts()
+    edge_counts = trace.unique_edge_counts()
+    fig1 = gsl.plot_samples(graph_counts, edge_counts, num_graphs_hist,
+                            num_edges_hist, num_graphs)
+
+    plt.figure()
+    plt.plot(trace.scores)
+
+    plt.show()
+    
+if __name__ == "__main__":
+    
+    # print(template_str)
+    gen_data = True
+    if gen_data == True:
+        datautils.gen_and_write_data("data4M", 0.995)
+
+    data_dir_name = "../../data4M"                
+    # run_test(data_dir_name)
+    
+    run_sampling(data_dir_name)
+    
+        # loss = loss_fn(graph_bin)    
+        # print("loss = ", loss)
+        # loss = loss_fn(graph_bin)    
+        # print("loss = ", loss)
+        # loss = loss_fn(graph_bin)    
+        # print("loss = ", loss)    
+        #dirname_to_graph(dirname)
 
 
     
