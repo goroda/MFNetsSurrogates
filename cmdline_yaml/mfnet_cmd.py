@@ -102,7 +102,11 @@ def fill_graph(graph, input_spec, model_info):
                 for model in input_spec['graph']['connection_models']:
                     if model['name'] == node:
                         logging.info(f"Regular node with type: {model['node_type']}")
-                        if model['edge_type'] == 'equal_model_average':
+                        try:
+                            et = model['edge_type']
+                        except KeyError:
+                            et = None
+                        if et == 'equal_model_average':
                             logging.info(f"Processing model averaged edge")
                             if model['node_type'] == "linear":
                                 graph.nodes[node]['func'] = \
