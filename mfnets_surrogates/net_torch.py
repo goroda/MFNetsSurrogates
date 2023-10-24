@@ -106,7 +106,7 @@ class EqualModelAverageEdge(nn.Module):
     """The edge model averages the parent model values and then learns a discrepancy."""
 
     def __init__(self, dim_in, dim_out, num_parents, model):
-        """Initialize the LinearScaleShift node for the MFNET
+        """Initialize the EqualModeAvergeEdge
 
         f_{j} = \frac{1}{num_parents} \sum  f_{i} + delta_j(x)
 
