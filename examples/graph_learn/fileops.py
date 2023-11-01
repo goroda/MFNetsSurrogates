@@ -10,9 +10,13 @@ import functools
 
 RESULTS_DIR_BASE="./results"
 
-template_file="templates/template.yaml"
+# template_file="templates/template.yaml"
+# with open(template_file, 'r') as file:
+#     template_str = file.read()
+
+template_file="templates/template_nn.yaml"
 with open(template_file, 'r') as file:
-    template_str = file.read()
+    template_str = file.read()    
 
 def gen_input_file(graph_file_name, data_dir="../../example_data"):
 
@@ -77,7 +81,7 @@ def run_dir(dirname):
     os.chdir(cwd)
     if loss == None:
         print(out)
-        error("something wrong with the run")
+        raise Exception("something wrong with the run")
     # out = subprocess.run(["ls", "-l"], capture_output=True, text=True)
     # print(out)
     cwd = os.getcwd()

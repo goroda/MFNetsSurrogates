@@ -19,6 +19,7 @@ cmdline_yaml/example_results_mo
 cmdline_yaml/example_results_mo_gen
 cmdline_yaml/example_results_mo_gen_single_fidelity
 cmdline_yaml/example_results_no_edges
+cmdline_yaml/log*
 
 *dist*
 *egg*

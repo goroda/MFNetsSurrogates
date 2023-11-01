@@ -299,6 +299,35 @@ def make_graph_2gen_nn_fixed():
     graph.add_edge(1, 2)
     return graph, set([1])
 
+def make_graph_8():
+    """A graph with 8 nodes.
+
+    3 -> 7 -> 8
+              ^
+              |
+         1 -> 4
+            / ^
+           /  |
+    2 -> 5 -> 6
+    """
+
+    graph = nx.DiGraph()
+
+    dinput = 1
+    for node in range(1, 9):
+        graph.add_node(node, func=torch.nn.Linear(dinput, 1, bias=True), dim_in=1, dim_out=1)
+
+    graph.add_edge(1, 4, func=torch.nn.Linear(dinput, 1, bias=True), out_rows=1, out_cols=1, dim_in=1)
+    graph.add_edge(2, 5, func=torch.nn.Linear(dinput, 1, bias=True), out_rows=1, out_cols=1, dim_in=1)
+    graph.add_edge(5, 6, func=torch.nn.Linear(dinput, 1, bias=True), out_rows=1, out_cols=1, dim_in=1)
+    graph.add_edge(6, 4, func=torch.nn.Linear(dinput, 1, bias=True), out_rows=1, out_cols=1, dim_in=1)
+    graph.add_edge(3, 7, func=torch.nn.Linear(dinput, 1, bias=True), out_rows=1, out_cols=1, dim_in=1)
+    graph.add_edge(7, 8, func=torch.nn.Linear(dinput, 1, bias=True), out_rows=1, out_cols=1, dim_in=1)
+    graph.add_edge(4, 8, func=torch.nn.Linear(dinput, 1, bias=True), out_rows=1, out_cols=1, dim_in=1)
+    graph.add_edge(5, 4, func=torch.nn.Linear(dinput, 1, bias=True), out_rows=1, out_cols=1, dim_in=1)
+
+    roots = set([1, 2, 3])
+    return graph, roots
 
 class MFNetTorch(nn.Module):
     """Multifidelity Network."""

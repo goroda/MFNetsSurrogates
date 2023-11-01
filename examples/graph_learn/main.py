@@ -36,7 +36,8 @@ def run_test(data_dir_name):
 def run_sampling(data_dir_name):
 
     
-    log_score = lambda g : -get_graph_loss(g.incidence_matrix.tobytes(), data_dir_name)*1e10
+    log_score = lambda g : -get_graph_loss(g.incidence_matrix.tobytes(),
+                                           data_dir_name) *1e10
 
     num_nodes = 4
 

@@ -1,126 +1,27 @@
 import unittest
 
-import numpy as np
-import torch
-import networkx as nx
+# import numpy as np
+# import torch
+# import networkx as nx
 
-from mfnets_surrogates.net_torch import *
+# from mfnets_surrogates.net_torch import *
+from test_utils import *
+from mfnets_surrogates.net_pyro import *
 
-def make_graph_8():
-    """A graph with 8 nodes.
-
-    3 -> 7 -> 8
-              ^
-              |
-         1 -> 4
-            / ^
-           /  |
-    2 -> 5 -> 6
-    """
-
-    graph = nx.DiGraph()
-
-    dinput = 1
-    for node in range(1, 9):
-        graph.add_node(node, func=torch.nn.Linear(dinput, 1, bias=True), dim_in=1, dim_out=1)
-
-    graph.add_edge(1, 4, func=torch.nn.Linear(dinput, 1, bias=True), out_rows=1, out_cols=1, dim_in=1)
-    graph.add_edge(2, 5, func=torch.nn.Linear(dinput, 1, bias=True), out_rows=1, out_cols=1, dim_in=1)
-    graph.add_edge(5, 6, func=torch.nn.Linear(dinput, 1, bias=True), out_rows=1, out_cols=1, dim_in=1)
-    graph.add_edge(6, 4, func=torch.nn.Linear(dinput, 1, bias=True), out_rows=1, out_cols=1, dim_in=1)
-    graph.add_edge(3, 7, func=torch.nn.Linear(dinput, 1, bias=True), out_rows=1, out_cols=1, dim_in=1)
-    graph.add_edge(7, 8, func=torch.nn.Linear(dinput, 1, bias=True), out_rows=1, out_cols=1, dim_in=1)
-    graph.add_edge(4, 8, func=torch.nn.Linear(dinput, 1, bias=True), out_rows=1, out_cols=1, dim_in=1)
-    graph.add_edge(5, 4, func=torch.nn.Linear(dinput, 1, bias=True), out_rows=1, out_cols=1, dim_in=1)
-
-    roots = set([1, 2, 3])
-    return graph, roots
-
-
-def make_graph_4():
-    """A graph with 4 nodes with different output dims
-
-    1- > 4 <- 2 <- 3
-    """
-
-    graph = nx.DiGraph()
-
-    dim_in = 1
-    dim_out = [2, 3, 6, 4]
-    
-    graph.add_node(1, func=torch.nn.Linear(dim_in, dim_out[0], bias=True), dim_in=dim_in, dim_out=dim_out[0])
-    graph.add_node(2, func=torch.nn.Linear(dim_in, dim_out[1], bias=True), dim_in=dim_in, dim_out=dim_out[1])
-    graph.add_node(3, func=torch.nn.Linear(dim_in, dim_out[2], bias=True), dim_in=dim_in, dim_out=dim_out[2])
-    graph.add_node(4, func=torch.nn.Linear(dim_in, dim_out[3], bias=True), dim_in=dim_in, dim_out=dim_out[3])
-    
-
-    graph.add_edge(1, 4, func=torch.nn.Linear(dim_in, dim_out[0] * dim_out[3], bias=True), out_rows=dim_out[3], out_cols=dim_out[0], dim_in=1)
-    graph.add_edge(2, 4, func=torch.nn.Linear(dim_in, dim_out[1] * dim_out[3], bias=True), out_rows=dim_out[3], out_cols=dim_out[1], dim_in=1)
-    graph.add_edge(3, 2, func=torch.nn.Linear(dim_in, dim_out[2] * dim_out[1], bias=True), out_rows=dim_out[1], out_cols=dim_out[2], dim_in=1)
-
-    roots = set([1, 3])
-    return graph, roots, dim_out
-
-def make_graph_4gen():
-    """A graph with 4 nodes with different output dims and generic edge functions
-
-    1- > 4 <- 2 <- 3
-    """
-
-    graph = nx.DiGraph()
-
-    dim_in = 1
-    dim_out = [2, 3, 6, 4]
-    
-    graph.add_node(1, func=torch.nn.Linear(dim_in, dim_out[0], bias=True))
-    graph.add_node(2, func=LinearScaleShift(dim_in, dim_out[1], dim_out[2]))
-    graph.add_node(3, func=torch.nn.Linear(dim_in, dim_out[2], bias=True))
-    graph.add_node(4, func=LinearScaleShift(dim_in, dim_out[3],dim_out[0]+dim_out[1]))
-    
-
-    graph.add_edge(1, 4)
-    graph.add_edge(2, 4)
-    graph.add_edge(3, 2)
-
-    roots = set([1, 3])
-    return graph, roots, dim_out
-
-def make_graph_4gen_nn():
-    """A graph with 4 nodes with different output dims and generic edge functions as fully connected neural networks
-
-    1- > 4 <- 2 <- 3
-    """
-
-    graph = nx.DiGraph()
-
-    dim_in = 1
-    dim_out = [2, 3, 6, 4]
-    
-    graph.add_node(1, func=torch.nn.Linear(dim_in, dim_out[0], bias=True))
-    graph.add_node(2, func=FullyConnectedNNEdge(dim_in, dim_out[1], dim_out[2],
-                                                hidden_layer_sizes=[100, 100,
-                                                                    100, 20]))
-    graph.add_node(3, func=torch.nn.Linear(dim_in, dim_out[2], bias=True))
-    graph.add_node(4, func=FullyConnectedNNEdge(dim_in, dim_out[3],
-                                                dim_out[0]+dim_out[1],
-                                                hidden_layer_sizes=[100,
-                                                                    100,
-                                                                    100,
-                                                                    20]))
-    
-
-    graph.add_edge(1, 4)
-    graph.add_edge(2, 4)
-    graph.add_edge(3, 2)
-
-    roots = set([1, 3])
-    return graph, roots, dim_out
-
+from pyro.infer.autoguide import (
+    AutoDelta,
+    AutoNormal,
+    AutoMultivariateNormal,
+    # AutoLowRankMultivariateNormal,
+    # AutoGuideList,
+    AutoIAFNormal,
+    # init_to_feasible,
+)
 
 class TestMfnetPyro(unittest.TestCase):
 
-    # @unittest.skip('testing other')
-    def test_least_squares_opt(self):
+    @unittest.skip('testing other')
+    def test_vi_mean_pred(self):
         torch.manual_seed(2)
 
         graph, roots = make_graph_8()
@@ -132,41 +33,76 @@ class TestMfnetPyro(unittest.TestCase):
 
         dx = 1
         ndata = [0] * 8
-        ndata[7] = 500
+        ndata[7] = 20
         x = torch.rand(ndata[7], 1)
-        y =  mfsurr_true.forward([x],[8])[0]
-        std = 1.#1e-4
+        y =  mfsurr_true.forward([x],[8])[0].detach()
+        # y =  x**2
 
-        graph_learn, roots_learn = make_graph_8()        
-        mfsurr_learn = MFNetTorch(graph_learn, roots_learn)
+        # import matplotlib.pyplot as plt
+        
+        # plt.figure()
+        # plt.plot(x, y, 'o', color='blue', alpha=0.2)
 
-        loss_fns = construct_loss_funcs(mfsurr_learn)    
+
+        # print("y = ", y)
+
         dataset = ArrayDataset(x, y)
         data_loaders = [torch.utils.data.DataLoader(dataset,
                                                     batch_size=ndata[7],
                                                     shuffle=False)]
+        
+        
+        graph_learn, roots_learn = make_graph_8()
+        model_trained = MFNetProbModel(graph_learn, roots_learn, noise_std=1e-3)
+        # guide = AutoIAFNormal(model_trained, hidden_dim=[100], num_transforms=2)    
+        guide = AutoNormal(model_trained)
+        # guide = AutoDelta(model_trained)
+        targets = [8]
+        adam_params = {"lr": 0.1, "betas": (0.9, 0.999)}
+        model_trained.train_svi(data_loaders, targets, guide, adam_params, max_steps=1000)
+
         # print(mfsurr_learn)
-        mfsurr_learn.train(data_loaders, [8], loss_fns[7:])
+        # mfsurr_learn.train(data_loaders, [8], loss_fns[7:])
 
-        print("\n")
-        with torch.no_grad():
-            predict = mfsurr_learn([x],[8])[0]
-            # print(predict.size())
-            err = torch.linalg.norm(predict-y)**2/2
-            print("err = ", err)
-            assert err<1e-4
+        # print("\n")
+        # with torch.no_grad():
+            # predict = mfsurr_learn([x],[8])[0]
+        num_samples = 1000
+        pred_samples = model_trained.predict([x],targets, num_samples)[1]
+        # print("pred_samples shape = ", pred_samples[0].shape)
+        mean_predict = torch.mean(pred_samples[0], dim=0)
+        # plt.figure()
+        # plt.plot(x.flatten(), pred_samples[0].T, 'o', color='red', alpha=0.2)
+        # plt.plot(x, y, 'o', color='blue')
+        # plt.plot(x, mean_predict, 'ko')
 
-        ntest=1000
+        # print("y size = ", y.shape)
+        # print("mean_predict.shape = ", mean_predict.shape)
+        
+        # print("error = ", mean_predict.flatten() - y.flatten())
+        err = torch.linalg.norm(mean_predict-y)**2 / ndata[7]  # / torch.linalg.norm(y)**2
+        # print("err = ", err)
+        # plt.show()
+        # exit(1)
+
+        assert err<1e-3, f"training error is {err}"
+
+        ntest = 100
         x_test = torch.rand(ntest, dx)
         with torch.no_grad():
             y_test =  mfsurr_true.forward([x_test],[8])[0]
-            predict_test = mfsurr_learn.forward([x_test], [8])[0]
-            err = torch.linalg.norm(predict_test-y_test)/np.sqrt(ntest)
-            print("err = ", err)
-            assert err<1e-3
+            
+            predict_test = torch.mean(model_trained.predict([x_test], [8], num_samples)[1][0], dim=0)
+            err = torch.linalg.norm(predict_test-y_test)**2 / ntest
+            # print("err = ", err)
+            # plt.figure()
+            # plt.plot(x_test, y_test, 'o', color='blue')
+            # plt.plot(x_test, predict_test, 'ko')
+            # plt.show()
+            assert err<1e-3, f"testing error is {err}"
 
-    # @unittest.skip('testing other')
-    def test_least_squares_opt_multi_out(self):
+    @unittest.skip('testing other')
+    def test_vi_multi_out(self):
         torch.manual_seed(2)
 
         # print("\n")
@@ -182,46 +118,52 @@ class TestMfnetPyro(unittest.TestCase):
         ndata[3] = 500
         x = torch.rand(ndata[3], 1)
         # y =  mfsurr_true.forward([x]*4,[1, 2, 3, 4])
-        y =  mfsurr_true.forward([x], [4])[0]
+        y =  mfsurr_true.forward([x], [4])[0].detach()
         # print("\n")
         # print("yshapes = ", [yy.size() for yy in y])
         # print("y = ", y)
         # exit(1)
-        std = 1.#1e-4
         
-        graph_learn, roots_learn, _ = make_graph_4()        
-        mfsurr_learn = MFNetTorch(graph_learn, roots_learn)
-
-        loss_fns = construct_loss_funcs(mfsurr_learn)    
         dataset = ArrayDataset(x, y)
         data_loaders = [torch.utils.data.DataLoader(dataset,
                                                     batch_size=ndata[3],
                                                     shuffle=False)]
-        # print(mfsurr_learn)
-        mfsurr_learn.train(data_loaders, [node], loss_fns[(node-1):])
+        
 
-        print("\n")
+        graph_learn, roots_learn, dim_out = make_graph_4()
+        model_trained = MFNetProbModel(graph_learn, roots_learn, noise_std=1e-2)
+        # guide = AutoIAFNormal(model_trained, hidden_dim=[100], num_transforms=2)    
+        guide = AutoNormal(model_trained)
+        # guide = AutoDelta(model_trained)
+        targets = [4]
+        adam_params = {"lr": 0.1, "betas": (0.9, 0.999)}
+        model_trained.train_svi(data_loaders, targets, guide, adam_params, max_steps=1000)
+
+        # print("\n")
         with torch.no_grad():
-            predict = mfsurr_learn([x],[node])[0]
-            # print(dim_out)
-            # print(predict.size())
+
+            num_samples = 10
+            pred_samples = model_trained.predict([x], targets, num_samples)[1]
+            predict = torch.mean(pred_samples[0], dim=0)
+            
             assert predict.size(dim=1) == dim_out[node-1]
 
-            err = torch.linalg.norm(predict-y)**2/2
+            err = torch.linalg.norm(predict-y)**2/ (dim_out[node-1] * ndata[-1])
             print("err = ", err)
-            assert err<1e-4
+            assert err<1e-3, f"error = {err}"
 
-        ntest=1000
+        ntest = 100
         x_test = torch.rand(ntest, dx)
         with torch.no_grad():
-            y_test =  mfsurr_true.forward([x_test],[node])[0]
-            predict_test = mfsurr_learn.forward([x_test], [node])[0]
-            err = torch.linalg.norm(predict_test-y_test)/np.sqrt(ntest)
+            y_test =  mfsurr_true.forward([x_test],[node])[0].detach()
+            predict_samples = model_trained.predict([x_test], [node], num_samples)[1]
+            predict = torch.mean(predict_samples[0], dim=0)
+            err = torch.linalg.norm(predict - y_test)**2/(ntest * dim_out[node-1])
             print("err = ", err)
-            assert err<1e-3
+            assert err<1e-3, f"Testing error = {err}"
 
-    # @unittest.skip('testing other')
-    def test_least_squares_opt_multi_out_gen(self):
+    @unittest.skip('testing other')
+    def test_vi_multi_out_gen(self):
         torch.manual_seed(2)
 
         # print("\n")
@@ -237,47 +179,43 @@ class TestMfnetPyro(unittest.TestCase):
         ndata[3] = 500
         x = torch.rand(ndata[3], 1)
         # y =  mfsurr_true.forward([x]*4,[1, 2, 3, 4])
-        y =  mfsurr_true.forward([x], [4])[0]
-        # print("\n")
-        # print("yshapes = ", [yy.size() for yy in y])
-        # print("y = ", y)
-        # exit(1)
-        std = 1.#1e-4
+        y =  mfsurr_true.forward([x], [4])[0].detach()
 
-        # learning
-        graph_learn, roots_learn, _ = make_graph_4gen()        
-        mfsurr_learn = MFNetTorch(graph_learn, roots_learn, edge_type="general")
-
-        loss_fns = construct_loss_funcs(mfsurr_learn)    
         dataset = ArrayDataset(x, y)
         data_loaders = [torch.utils.data.DataLoader(dataset,
                                                     batch_size=ndata[3],
                                                     shuffle=False)]
-        # print(mfsurr_learn)
-        mfsurr_learn.train(data_loaders, [node], loss_fns[(node-1):])
-
+        # learning
+        graph_learn, roots_learn, _ = make_graph_4gen()
+        model_trained = MFNetProbModel(graph_learn, roots_learn, edge_type="general", noise_std=1e-2)
+        guide = AutoNormal(model_trained)
+        targets = [4]
+        adam_params = {"lr": 0.1, "betas": (0.9, 0.999)}
+        model_trained.train_svi(data_loaders, targets, guide, adam_params, max_steps=1000)
+        
         print("\n")
         with torch.no_grad():
-            predict = mfsurr_learn([x],[node])[0]
-            # print(dim_out)
-            # print(predict.size())
+            num_samples = 10
+            pred_samples = model_trained.predict([x], targets, num_samples)[1]
+            predict = torch.mean(pred_samples[0], dim=0)
+            
             assert predict.size(dim=1) == dim_out[node-1]
-
-            err = torch.linalg.norm(predict-y)**2/2
+            err = torch.linalg.norm(predict-y)**2 / (ndata[3] * dim_out[3])
             print("err = ", err)
-            assert err<1e-4
+            assert err<1e-3, f"Train error = {err}"
 
         ntest=1000
         x_test = torch.rand(ntest, dx)
         with torch.no_grad():
             y_test =  mfsurr_true.forward([x_test],[node])[0]
-            predict_test = mfsurr_learn.forward([x_test], [node])[0]
-            err = torch.linalg.norm(predict_test-y_test)/np.sqrt(ntest)
+            predict_samples = model_trained.predict([x_test], [node], num_samples)[1]
+            predict = torch.mean(predict_samples[0], dim=0)
+            err = torch.linalg.norm(predict - y_test)**2/(ntest * dim_out[node-1])
             print("err = ", err)
-            assert err<1e-3
+            assert err<1e-3, f"Test error = {err}"
 
     # @unittest.skip('testing other')
-    def test_least_squares_opt_multi_out_gen_nn(self):
+    def test_vi_multi_out_gen_nn(self):
         torch.manual_seed(2)
 
         # print("\n")
@@ -292,49 +230,101 @@ class TestMfnetPyro(unittest.TestCase):
 
         dx = 1
         ndata = [0] * 4
-        ndata[3] = 500
+        ndata[3] = 5
         x = torch.rand(ndata[3], 1)
         # y =  mfsurr_true.forward([x]*4,[1, 2, 3, 4])
-        y =  mfsurr_true.forward([x], [4])[0]
-        # print("\n")
-        # print("yshapes = ", [yy.size() for yy in y])
-        # print("y = ", y)
-        # exit(1)
-        std = 1.#1e-4
+        y =  mfsurr_true.forward([x], [4])[0].detach()
 
-        # learning
-        graph_learn, roots_learn, _ = make_graph_4gen_nn()        
-        mfsurr_learn = MFNetTorch(graph_learn, roots_learn, edge_type="general")
-
-        loss_fns = construct_loss_funcs(mfsurr_learn)    
         dataset = ArrayDataset(x, y)
         data_loaders = [torch.utils.data.DataLoader(dataset,
                                                     batch_size=ndata[3],
                                                     shuffle=False)]
-        # print(mfsurr_learn)
-        mfsurr_learn.train(data_loaders, [node], loss_fns[(node-1):],
-                           max_iter=500)
-
+        
+        # learning
+        graph_learn, roots_learn, _ = make_graph_4gen_nn()
+        model_trained = MFNetProbModel(graph_learn, roots_learn, edge_type="general", noise_std=1e-3)
+        guide = AutoNormal(model_trained)
+        targets = [4]
+        adam_params = {"lr": 0.1, "betas": (0.95, 0.999)}
+        model_trained.train_svi(data_loaders, targets, guide, adam_params, max_steps=10000)
+        
         print("\n")
         with torch.no_grad():
-            predict = mfsurr_learn([x],[node])[0]
-            # print(dim_out)
-            # print(predict.size())
-            assert predict.size(dim=1) == dim_out[node-1]
+            num_samples = 100
+            pred_samples = model_trained.predict([x], targets, num_samples)[1]
+            predict = torch.mean(pred_samples[0], dim=0)
 
-            err = torch.linalg.norm(predict-y)**2/2
+            assert predict.size(dim=1) == dim_out[node-1]
+            err = torch.linalg.norm(predict-y)**2 / (ndata[3] * dim_out[3])
             print("err = ", err)
-            assert err<1e-4
+            assert err < 1e-3, f"Training error = {err}"
 
         ntest=1000
         x_test = torch.rand(ntest, dx)
         with torch.no_grad():
             y_test =  mfsurr_true.forward([x_test],[node])[0]
-            predict_test = mfsurr_learn.forward([x_test], [node])[0]
-            err = torch.linalg.norm(predict_test-y_test)/np.sqrt(ntest)
+            predict_samples = model_trained.predict([x_test], [node], num_samples)[1]
+            predict = torch.mean(predict_samples[0], dim=0)
+            err = torch.linalg.norm(predict - y_test)**2/(ntest * dim_out[node-1])            
             print("err = ", err)
-            assert err<1e-3
-        
+            assert err<1e-3, f"Testing error = {err}"
+
+
+    @unittest.skip('testing other')
+    def test_vi_multi_out_gen_nn_model_average(self):
+        torch.manual_seed(2)
+
+        # print("\n")
+        # graph, roots, dim_out = make_graph_4gen_nn()
+        graph, roots, dim_out = make_graph_4gen_nn_equal_model_average()
+
+        node = 4
+
+        ## Truth
+        # mfsurr_true = MFNetTorch(graph, roots, edge_type="general")
+        mfsurr_true = MFNetTorch(graph, roots, edge_type="general")
+
+        dx = 1
+        ndata = [0] * 4
+        ndata[3] = 500
+        x = torch.rand(ndata[3], 1)
+        y =  mfsurr_true.forward([x], [4])[0].detach()
+
+        dataset = ArrayDataset(x, y)
+        data_loaders = [torch.utils.data.DataLoader(dataset,
+                                                    batch_size=ndata[3],
+                                                    shuffle=False)]        
+
+        # learning
+        graph_learn, roots_learn, _ = make_graph_4gen_nn_equal_model_average()
+        model_trained = MFNetProbModel(graph_learn, roots_learn, edge_type="general", noise_std=1e0)
+        guide = AutoNormal(model_trained)
+        targets = [4]
+        adam_params = {"lr": 0.001, "betas": (0.5, 0.999)}
+        model_trained.train_svi(data_loaders, targets, guide, adam_params, max_steps=5000)        
+
+
+        print("\n")
+        with torch.no_grad():
+            num_samples = 100
+            pred_samples = model_trained.predict([x], targets, num_samples)[1]
+            predict = torch.mean(pred_samples[0], dim=0)
+
+            assert predict.size(dim=1) == dim_out[node-1]
+            err = torch.linalg.norm(predict-y)**2/2
+            print("err = ", err)
+            assert err<1e-4, f"Training error = {err}"
+
+        ntest=1000
+        x_test = torch.rand(ntest, dx)
+        with torch.no_grad():
+            y_test =  mfsurr_true.forward([x_test],[node])[0]
+            predict_samples = model_trained.predict([x_test], [node], num_samples)[1]
+            predict = torch.mean(predict_samples[0], dim=0)
+            err = torch.linalg.norm(predict - y_test)**2/(ntest * dim_out[node-1])
+            print("err = ", err)
+            assert err<1e-3, f"Testing error = {err}"
+            
 if __name__== "__main__":    
     mfnet_pyro_test_suite = unittest.TestLoader().loadTestsFromTestCase(TestMfnetPyro)
     unittest.TextTestRunner(verbosity=2).run(mfnet_pyro_test_suite)

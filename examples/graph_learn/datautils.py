@@ -5,6 +5,34 @@ import os
 from mfnets_surrogates.net_torch import *
 from sklearn.model_selection import train_test_split
 
+def make_graph_4gen_nn():
+    """A graph with 4 nodes with different output dims and generic edge functions as fully connected neural networks
+
+    1- > 4 <- 2 <- 3
+    """
+
+    graph = nx.DiGraph()
+
+    dim_in = 1
+    dim_out = [1, 1, 1, 1]
+    
+    graph.add_node(1, func=torch.nn.Linear(dim_in, dim_out[0], bias=True))
+    graph.add_node(2, func=FullyConnectedNNEdge(dim_in, dim_out[1], dim_out[2],
+                                                hidden_layer_sizes=[20, 20]))
+    graph.add_node(3, func=torch.nn.Linear(dim_in, dim_out[2], bias=True))
+    graph.add_node(4, func=FullyConnectedNNEdge(dim_in, dim_out[3],
+                                                dim_out[0]+dim_out[1],
+                                                hidden_layer_sizes=[20,
+                                                                    20]))
+
+    graph.add_edge(1, 4)
+    graph.add_edge(2, 4)
+    graph.add_edge(3, 2)
+
+    roots = set([1, 3])
+    return graph, roots, dim_out
+
+
 def make_graph_4():
     """A graph with 4 nodes with different output dims
 
@@ -34,11 +62,17 @@ def make_graph_4():
     return graph, roots, dim_out
 
 
-def gen_data(num_data, seed=5):
+def gen_data(num_data, shift_scale=True, seed=5):
     torch.manual_seed(2)
 
-    graph, roots, dim_out = make_graph_4()    
-    mfsurr_true = MFNetTorch(graph, roots)        
+    if shift_scale == True:
+        graph, roots, dim_out = make_graph_4()
+        mfsurr_true = MFNetTorch(graph, roots)        
+    else:
+        graph, roots, dim_out = make_graph_4gen_nn()
+        mfsurr_true = MFNetTorch(graph, roots, edge_type="general")
+        
+
 
     ndata = [num_data, num_data, num_data, num_data]
     print(ndata)
@@ -48,11 +82,11 @@ def gen_data(num_data, seed=5):
     return x, y
 
 
-def gen_and_write_data(dirname, frac_test=0.95):
+def gen_and_write_data(dirname, shift_scale=True, frac_test=0.95):
 
     os.makedirs(dirname, exist_ok=True)  
     
-    x, y = gen_data(500, seed=2)
+    x, y = gen_data(500, shift_scale=shift_scale, seed=2)
     x = x.detach().numpy()
     y = [yy.detach().numpy() for yy in y]
     
