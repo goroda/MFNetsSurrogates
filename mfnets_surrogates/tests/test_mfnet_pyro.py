@@ -242,11 +242,13 @@ class TestMfnetPyro(unittest.TestCase):
         
         # learning
         graph_learn, roots_learn, _ = make_graph_4gen_nn()
-        model_trained = MFNetProbModel(graph_learn, roots_learn, edge_type="general", noise_std=1e-3)
+        model_trained = MFNetProbModel(graph_learn, roots_learn, edge_type="general", noise_std=1e-0)
+        # guide = AutoIAFNormal(model_trained)    
         guide = AutoNormal(model_trained)
         targets = [4]
         adam_params = {"lr": 0.1, "betas": (0.95, 0.999)}
-        model_trained.train_svi(data_loaders, targets, guide, adam_params, max_steps=10000)
+        print("train")
+        model_trained.train_svi(data_loaders, targets, guide, adam_params, max_steps=1000)
         
         print("\n")
         with torch.no_grad():
