@@ -2,6 +2,8 @@
 
 import functools
 import itertools
+import logging
+logger = logging.getLogger(__name__)
 
 import pandas as pd
 
@@ -109,7 +111,15 @@ def param_samples_to_pandas(samples):
 
 class MFNetProbModel(pyro.nn.PyroModule):
     """Probabilistic MFNet."""
-    
+
+
+    # def __init__(self, model, noise_std=1.0):
+    #     self.model = model
+    #     self.sigma = noise_std
+    #     self.guide = None # for variational inference
+    #     self.mcmc = None # for mcmc
+    #     convert_to_pyro(self.model)
+
     def __init__(self, graph, roots, noise_std=1.0, **kwargs):
         """Initialize Probabilistic MFNET."""
         super().__init__()
@@ -167,7 +177,8 @@ class MFNetProbModel(pyro.nn.PyroModule):
                   adam_params={"lr": 0.01,
                                "betas": (0.95, 0.999)},
                   max_steps=1000,
-                  print_frac=0.1):
+                  print_frac=0.1,
+                  logfile=None):
         """ Train the model. 
 
         Parameters
@@ -184,6 +195,10 @@ class MFNetProbModel(pyro.nn.PyroModule):
         self
         """
 
+        if logfile is not None:
+            logging.basicConfig(level=logging.INFO, filename=logfile)
+            logging.FileHandler(logfile, 'w+')
+            
         optimizer = Adam(adam_params)
         svi = SVI(self, guide, optimizer, loss=Trace_ELBO())
         self.guide = guide
@@ -200,7 +215,10 @@ class MFNetProbModel(pyro.nn.PyroModule):
             # self.model.zero_grad()
             elbo = svi.step(x, targets, y)
             if step % print_increment == 0:
-                print(f"Iteration {step}\t Elbo loss: {elbo}")
+                if logfile is not None:
+                    logging.info(f"Iteration {step}\t Elbo loss: {elbo}")
+                else:
+                    print(f"Iteration {step}\t Elbo loss: {elbo}")
                 
         return self
 

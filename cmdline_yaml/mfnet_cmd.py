@@ -31,8 +31,10 @@ from pyro.infer.autoguide import (
 import pandas as pd
 
 import logging
-logging.basicConfig(level=logging.INFO, filename="log.log")
-logging.FileHandler("log.log", 'w+')
+LOGFILE = "log.log"
+TRAINLOG = "train.log"
+logging.basicConfig(level=logging.INFO, filename=LOGFILE)
+logging.FileHandler(LOGFILE, 'w+')
 
 ModelTrainData = namedtuple('ModelTrainData', ('train_in', 'train_out', 'dim_in', 'dim_out', 'output_dir'))
 
@@ -318,6 +320,9 @@ if __name__ == "__main__":
 
     # print(model_info)
     # exit(1)
+
+    data_loaders, scalers_in, scalers_out = model_info_to_dataloaders(model_info, graph.nodes)    
+    
     #########################
     ## Run algorithms
     if input_spec['inference_type'] == "regression":
@@ -327,58 +332,34 @@ if __name__ == "__main__":
         model = net.MFNetTorch(graph, roots, edge_type=input_spec['graph']['connection_type'])
         logging.info(f"Model: {model}")
         
-        ## Training Setup
-        loss_fns = net.construct_loss_funcs(model)
-
-        data_loaders, scalers_in, scalers_out = model_info_to_dataloaders(model_info, graph.nodes)
-
-
         ## Train
+        loss_fns = net.construct_loss_funcs(model)        
         obj_func = model.train(data_loaders, target_nodes, loss_fns)
         logging.info(f"Model Loss: {obj_func}")
-        ## Evaluate and save to file
-        for node in graph.nodes:
-            test_pts = model_test_inputs[node]
-            if test_pts is not None:
-                logging.info(f"Evaluating model {node} at test points")
 
-                for (fname, data) in test_pts:
-                    # print("fname = ", fname)
-                    x = torch.Tensor(data.to_numpy())
-                    x_scaled = torch.Tensor(scalers_in[node].transform(x))
-                    
-                    vals = model([x_scaled], [node])[0].detach().numpy()
-                    vals_unscaled = scalers_out[node].inverse_transform(vals)
-                    results = pd.DataFrame(vals_unscaled, columns=model_info[node].train_out.columns)
-                    dirname =  model_info[node].output_dir
-                    os.makedirs(dirname, exist_ok=True)
-                    filename = os.path.join(dirname, f"{fname}.evals")
-                    results.to_csv(filename, sep=' ', index=False)
 
-    elif input_spec['inference_type'] == "bayes": # UNTESTED
+    elif input_spec['inference_type'] == "bayes": # 
 
         logging.info("Running Bayesian Inference")
-        noise_var = float(input_spec['algorithm']['noise_var'])
+        noise_std = float(input_spec['algorithm']['noise_std'])
 
-        model = net_pyro.MFNetProbModel(graph, roots, noise_var=noise_var,
+        model = net_pyro.MFNetProbModel(graph, roots, noise_std=noise_std,
                                         edge_type=input_spec['graph']['connection_type'],)
-
-        alg = input_spec['algorithm']['parameterization']
-
+        logging.info(f"Model: {model}")
+        
         ## Algorithm parameters
-        num_samples = input_spec['algorithm']['num_samples']
-        logging.info(f"Number of parameter samples: {num_samples}")
+        alg = input_spec['algorithm']['parameterization']
+        num_samples = input_spec['algorithm']['num_pred_samples']
+
         
         ## Data setup
-        X = [torch.Tensor(model_info[node].train_in.to_numpy()) for node in target_nodes]
-        Y = [torch.Tensor(model_info[node].train_out.to_numpy()) for node in target_nodes]
         if alg[:3] == 'svi':
             # SVI
             logging.info("Running Stochastic Variational Inference")
             
             adam_params = {"lr": 0.005, "betas": (0.95, 0.999)}
             num_steps = input_spec['algorithm']['num_optimization_steps']
-        
+                        
             optimizer = Adam(adam_params)
             if alg == 'svi-normal':
                 logging.info("Approximating with an AutoNormal Guide")
@@ -394,27 +375,14 @@ if __name__ == "__main__":
             else:
                 logging.info(f"Algorithm \'{alg}\' is not recognized")
                 exit(1)
-                
-            svi = SVI(model, guide, optimizer, loss=Trace_ELBO())
 
-            logging.info(f"Number of steps = {num_steps}")
-            #do gradient steps
-            for step in range(num_steps):
-                elbo = svi.step(X, target_nodes, Y)
-                if step % 100 == 0:
-                    logging.info(f"Iteration {step}\t Elbo loss: {elbo}")
 
-            predictive = Predictive(model, guide=guide, num_samples=num_samples)
+            logging.info(f"Number of steps = {num_steps}")                
+            model.train_svi(data_loaders, target_nodes, guide, adam_params, max_steps=num_steps, logfile=TRAINLOG)
 
-            # just generate arbitrary input locations, we are just getting samples
-            # of latent space here, this is a hack but unclear how to just sample
-            # from the guide
-            xone = [xx[0:1,:] for xx in X]
-            pred = predictive(xone, target_nodes)
-
-            param_samples = {k:v for k,v in pred.items() if k[:3] != "obs"}
-
+            # logging.info(f"Iteration {step}\t Elbo loss: {elbo}")            
         elif alg == 'mcmc':
+            raise InputError("Cannot Run MCMC yet")
             # MCMC
             num_chains = 1
             warmup = input_spec['algorithm']['mcmc_params']['burnin']
@@ -437,43 +405,40 @@ if __name__ == "__main__":
             exit(1)
 
 
-        # Save samples
-        # print(param_samples)
-        df = net_pyro.samples_to_pandas(param_samples)
-        # print(df.describe())
-        sample_filename = os.path.join(save_dir, input_spec['algorithm']['sample_output_files'])
-        logging.info(f"Saving samples to {sample_filename}")
-        df.to_csv(sample_filename, sep=' ', index=False)
+    ## Evaluate and save to file
+    logging.info(f"Evaluating Test data")
+    if input_spec['inference_type'] == "bayes":
+        logging.info(f"Number of prediction samples: {num_samples}")
+        
+    for node in graph.nodes:
+        test_pts = model_test_inputs[node]
+        if test_pts is not None:
+            logging.info(f"Evaluating model {node} at test points")
 
+            for (fname, data) in test_pts:
+                # print("fname = ", fname)
+                x = torch.Tensor(data.to_numpy())
+                x_scaled = torch.Tensor(scalers_in[node].transform(x))
 
-        # Perform predictions
-        predictive = Predictive(model,  param_samples)
-
-        ## Evaluate and save to file
-        for node in graph.nodes:
-            test_pts = model_test_inputs[node]
-            if test_pts is not None:
-                logging.info(f"Evaluating model {node} at test points")
-
-                for (fname, data) in test_pts:
-                    # print("fname = ", fname)
-                    x = torch.Tensor(data.to_numpy())
-                    vals = predictive([x], [node])
-                    # print("values = ")
-                    # print(vals)
-                    for jj, qoi_name in enumerate(model_info[node].train_out.columns):
-                        dirname = model_info[node].output_dir
-                        filename = os.path.join(dirname, f"{fname}.samples_{qoi_name}")
-                        logging.info(f"Saving samples for file {fname} and qoi {qoi_name} to {filename}")
-                        key = f"obs{node}-{jj}"
-                        col_vals = vals[key].detach().numpy() # num_samples x 
-                        col_names = [f"x_{ii}" for ii in range(x.size(dim=0))]
-                        results = pd.DataFrame(col_vals, columns=col_names)
-                        # print(results.describe())
-
-                        os.makedirs(dirname, exist_ok=True)
-                        results.to_csv(filename, sep=' ', index=False)
-
+                dirname =  model_info[node].output_dir
+                os.makedirs(dirname, exist_ok=True)
+                filename = os.path.join(dirname, f"{fname}.evals")
+                
+                if input_spec['inference_type'] == "regression":
+                    vals = model([x_scaled], [node])[0].detach().numpy()
+                    vals_unscaled = scalers_out[node].inverse_transform(vals)
+                    results = pd.DataFrame(vals_unscaled, columns=model_info[node].train_out.columns)
+                    results.to_csv(filename, sep=' ', index=False)
+                elif input_spec['inference_type'] == "bayes":
+                    vals_pred = model.predict([x_scaled], [node], num_samples)[1][0].detach().numpy()
+                    for jj in range(num_samples):
+                        filename_jj = filename + f"_{jj}"
+                        vals_unscaled = scalers_out[node].inverse_transform(vals_pred[jj, :, :])
+                        results = pd.DataFrame(vals_unscaled, columns=model_info[node].train_out.columns)
+                        results.to_csv(filename_jj, sep=' ', index=False)
+                else:
+                    raise InputError(f"Inference type {input_spec['inference_type']} unrecognized")
+                        
 
         # fig, axs = plt.subplots(3,1, sharex=True)
         # axs[0].plot(eval_locs, vals["obs1"].transpose(0,1), '-r', alpha=0.2)
@@ -495,4 +460,4 @@ if __name__ == "__main__":
         # print(df.describe())
 
         # Print out the objective function
-        print(obj_func)
+        # print(obj_func)
