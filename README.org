@@ -267,7 +267,10 @@ The unit test can be run with
 python -m unittest test_mfnet_torch.py -v
 #+END_SRC
 
-** Detailed example Pyro 
+** Detailed example Pyro
+For now please see either the Pyro unit tests or the examples in the net_pyro file.
+
+#+BEGIN_COMMENT
   The PyTorch example showed how to train a deterministic MFNet that does not account for the uncertainty in the node and edge functions that remains due to insufficient data. For this, we can use the Pyro probabilistic programming language. The setup for the graph is identical to the PyTorch example. However, we now instantiate the model as
 
 #+BEGIN_SRC python 
@@ -354,23 +357,18 @@ df = samples_to_pandas(param_samples)
 # Get the samples of the values
 vals = {k: v for k,v in pred.items() if k[:3] == "obs"} 
 #+END_SRC
-   
+#+END_COMMENT
+
 ** Citation
 
 Please cite the following paper if you find this code to be useful
 
 - Gorodetsky, Alex A., John D. Jakeman, and Gianluca Geraci. "MFNets: data efficient all-at-once learning of multifidelity surrogates as directed networks of information sources." Computational Mechanics 68.4 (2021): 741-758.
 
-
-
-** TODOS 
-   - Add unit tests for the Pyro interface 
-   - Ensure multi-output works with Pyro
-   - Update cmdline_yaml with the pyro interface 
-   - Add a simpler MCMC interface for pyro
+** TODOS
+   - MCMC with pyro does not seem to very robust, fix this
+   - Last two unit tests for Pyro interface cannot achieve same precision as just regression, investigate. 
    - Update README with the new interface.
-   - cmdline_yaml has scaling setup for the regression, but need to set it up for the sampling
-   - Training for the MAP estimate with AutoDelta doesnt work
 ** More information
 
  Author: Alex Gorodetsky 
