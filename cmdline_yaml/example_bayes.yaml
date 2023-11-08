@@ -21,6 +21,7 @@ model_info: # names must match the nodes in the graph.edge_list file
 inference_type: bayes
 algorithm:
   noise_std: 1e-3 # just leave it here, doesnt do much yet
+  noise_std_predict: 1e-13  # include if want to predict with a different noise after training
   parameterization: svi-normal # (only for bayes) mcmc, svi-normal, svi-multinormal, svi-iafflow for bayes
   mcmc_params: # only needed if mcmc is specified above
     burnin: 100

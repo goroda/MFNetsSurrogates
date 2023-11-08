@@ -128,6 +128,9 @@ class MFNetProbModel(pyro.nn.PyroModule):
         self.guide = None # for variational inference
         self.mcmc = None # for mcmc
         convert_to_pyro(self.model)
+
+    def update_noise_std(self, noise_std):
+        self.sigma = noise_std
         
     def forward(self, x, targets, y=None):
         """Evaluate model.

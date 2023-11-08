@@ -430,6 +430,8 @@ if __name__ == "__main__":
                     results = pd.DataFrame(vals_unscaled, columns=model_info[node].train_out.columns)
                     results.to_csv(filename, sep=' ', index=False)
                 elif input_spec['inference_type'] == "bayes":
+                    if 'noise_std_predict' in input_spec:
+                        model.update_noise_std(input_spec['noise_std_predict'])
                     vals_pred = model.predict([x_scaled], [node], num_samples)[1][0].detach().numpy()
                     for jj in range(num_samples):
                         filename_jj = filename + f"_{jj}"
@@ -439,25 +441,3 @@ if __name__ == "__main__":
                 else:
                     raise InputError(f"Inference type {input_spec['inference_type']} unrecognized")
                         
-
-        # fig, axs = plt.subplots(3,1, sharex=True)
-        # axs[0].plot(eval_locs, vals["obs1"].transpose(0,1), '-r', alpha=0.2)
-        # axs[0].plot(X[0], Y[0], 'ko')
-
-        # axs[1].plot(eval_locs, vals["obs2"].transpose(0,1), '-r', alpha=0.2)
-        # axs[1].plot(X[1], Y[1], 'ko')
-
-        # axs[2].plot(eval_locs, vals["obs3"].transpose(0,1), '-r', alpha=0.2)
-        # axs[2].plot(X[2], Y[2], 'ko')
-
-        # pred_filename = f"{save_evals_filename}_predict.pdf"
-        # plt.savefig(pred_filename)
-        # plt.show()
-
-
-
-        # df = pd.read_csv(sample_filename)
-        # print(df.describe())
-
-        # Print out the objective function
-        # print(obj_func)
