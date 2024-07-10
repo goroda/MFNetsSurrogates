@@ -1,5 +1,5 @@
 ---
-num_models: 2
+num_models: 1
 save_dir: example_results_mo_gen_single_fidelity
 model_info: # names must match the nodes in the graph.edge_list file
   - 
