@@ -24,6 +24,7 @@ cmdline/example_results_mo_gen_single_fidelity
 cmdline/example_results_no_edges
 cmdline/log*
 cmdline/train.log
+*.log*
 
 *dist*
 *egg*
