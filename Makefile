@@ -11,8 +11,8 @@ format:
 	ruff format
 
 lint:
-	python -m pylint pytens
-	python -m flake8 pytens
+	python -m pylint mfnets_surrogates
+	python -m flake8 mfnets_surrogates
 
 type-check:
 	python -m mypy 
