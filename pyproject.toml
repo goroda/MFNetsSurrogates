@@ -5,9 +5,9 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "MFNetsSurrogates"
 description = "Multifidelity surrogate networks"
-readme = "README.org"
+# readme = "README.org"
 requires-python = ">= 3.11"
-license = "MIT"
+license = {text = "MIT License"}
 version = "0.0.1"
 keywords = ["Networks",
     "Graph Theory",
@@ -25,7 +25,8 @@ classifiers = [
 ]
 dependencies = [
   "numpy ~=2.1.0",
-  "scipy"
+  "scipy",
+  "pandas",
   "networkx",
   "matplotlib", # for plotting
   "torch",

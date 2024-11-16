@@ -17,9 +17,18 @@ lint:
 type-check:
 	python -m mypy 
 
-test:
-	python -m unittest tests/main_test.py -v
+test-mfnet:
+	python -m unittest tests/test_mfnet.py -v
+
+test-mfnet-torch:
+	python -m unittest tests/test_mfnet_torch.py -v
+
+test-mfnet-pyro:
+	 python -m unittest tests/test_mfnet_pyro.py -v
+
+test: test-mfnet test-mfnet-torch test-mfnet-pyro
 
 ci: check format lint type-check test
 
-.PHONY: init check format lint test type-check
+.PHONY: init check format lint test type-check test-mfnet \
+		test-mfnet-torch test-mfnet-pyro
