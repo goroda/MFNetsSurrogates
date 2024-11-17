@@ -1,4 +1,4 @@
-This contains examples of how to run the mfnets cmdline interface. You can run any example by e.g., runnign
+This contains examples of how to run the mfnets cmdline interface. You can run any example by e.g., running
 
 ```
 make ex1
