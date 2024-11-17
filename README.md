@@ -287,11 +287,12 @@ Please cite the following paper if you find this code to be useful
 
 ## More information
 
- Author: Alex Gorodetsky 
-
- Contact: <goroda@umich.edu>
-
+ Author: Alex Gorodetsky   
+ Contact: <goroda@umich.edu>  
  Copyright (c) 2020 Alex Gorodetsky  
-
  License: MIT
+ 
+ ### Other Contributors: 
+ - John Jakeman, Sandia National Laboratories with PyApprox integration with L1   
+ - Xiaoshu Zeng, University of Southern California with the PCE Model
 

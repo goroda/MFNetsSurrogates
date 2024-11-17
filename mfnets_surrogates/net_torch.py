@@ -16,6 +16,8 @@ except ImportError:
 # dtype = torch.float
 device = torch.device("cpu")
 
+from .pce_model import PCE
+
 
 __all__ = [
     "ArrayDataset",
@@ -25,6 +27,7 @@ __all__ = [
     "FullyConnectedNNEdge",
     "EqualModelAverageEdge",
     "LinearScaleShift",
+    "PolyScaleShift"
 ]
 
 
@@ -223,6 +226,67 @@ class LinearScaleShift(nn.Module):
         node_func = self.node(xinput)
 
         return edge_func + node_func
+
+class PolyScaleShift(nn.Module):
+    """A generalized scale and shift operator for the MFNET"""
+
+    def __init__(self, dim_in, dim_out, num_parent_vals_in,
+                 poly_order, poly_name):
+        """Initialize the PolynomialScaleShift node for the MFNET
+
+        f_{j} = edge(x) \vec{parent_outputs} + node(x)
+
+        node could be a polynomial. Edge is linear
+
+        Parameters
+        ----------
+        dim_in : integer
+            Dimension of the input space
+
+        dim_out : integer
+            Dimension of the output space
+
+        num_parent_vals_in : integer
+            Dimension of outputs of the parents
+
+        poly_order: integer 
+            polynomial order 
+
+        poly_name: str 'Hermite' or 'Legendre'
+        """
+        super().__init__()
+
+        self.dim_out = dim_out
+        self.num_parent_vals_in = num_parent_vals_in
+
+        # edge model
+        self.edge = torch.nn.Linear(
+            dim_in, dim_out * num_parent_vals_in, bias=True
+        )
+
+        # node model
+        self.node = PCE(dim_in, dim_out, poly_order, poly_name)
+
+    def forward(self, xinput, parent_vals):
+        """Evaluate the linear scale shift node model
+
+        Parent values are expected to be (num_samples, flattened)
+        """
+
+        edge_eval = self.edge(
+            xinput
+        )  # should be num data x (num_out * num_parents_val_in)
+        edge_eval = edge_eval.reshape(
+            edge_eval.size(dim=0), self.dim_out, self.num_parent_vals_in
+        )
+
+        # print("input size = ", xinput.size())
+        # print("parent_val size = ", parent_vals.size())
+        edge_func = torch.einsum("ijk,ik->ij", edge_eval, parent_vals)
+
+        node_func = self.node(xinput)
+
+        return edge_func + node_func    
 
 
 def make_graph_single():

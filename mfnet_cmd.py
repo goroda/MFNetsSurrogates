@@ -13,7 +13,7 @@ from sklearn import preprocessing
 # import matplotlib.pyplot as plt
 
 from mfnets_surrogates import net_torch as net
-from mfnets_surrogates import net_pyro
+from mfnets_surrogates import net_pyro, pce_model
 
 from pyro.infer import MCMC, NUTS, Predictive, SVI, Trace_ELBO
 from pyro.optim import Adam
@@ -50,13 +50,19 @@ def fill_graph(graph, input_spec, model_info):
     
     if input_spec['graph']['connection_type'] == 'scale-shift':
         logging.info('Scale-shift edge functions are used')
+        model = input_spec['graph']['connection_models']
         for node in graph.nodes:
 
             # works because model names must match in the input file and in the graph.edge_list file
             dim_in = model_info[node].dim_in
             dim_out = model_info[node].dim_out
             logging.info(f"Updating function for graph node {node}: dim_in = {dim_in}, dim_out = {dim_out}")
-            graph.nodes[node]['func'] = torch.nn.Linear(dim_in, dim_out, bias=True)
+            if model['node_type'] == "linear":
+                graph.nodes[node]['func'] = torch.nn.Linear(dim_in, dim_out, bias=True)
+
+            else:
+                raise NotImplementedError("node type other than linear or polynomial for scale shift")
+                
             graph.nodes[node]['dim_in'] = dim_in
             graph.nodes[node]['dim_out'] = dim_out
 
@@ -91,6 +97,13 @@ def fill_graph(graph, input_spec, model_info):
                         logging.info(f"Leaf node with type: {model['node_type']}")
                         if model['node_type'] == "linear":
                             graph.nodes[node]['func'] = torch.nn.Linear(dim_in, dim_out, bias=True)
+                        elif model['node_type'] == "polynomial":
+                            poly_order = model['poly_order']
+                            poly_name = model['poly_name']  # HG or LU
+                            graph.nodes[node]['func'] = pce_model.PCE(dim_in,
+                                                                      dim_out,
+                                                                      poly_order,
+                                                                      poly_name)
                         elif model['node_type'] == "feedforward":
                             hidden_layer = model['hidden_layers']
                             logging.info(f'Feedforward with hidden layer sizes: {hidden_layer}')
@@ -114,7 +127,7 @@ def fill_graph(graph, input_spec, model_info):
                                 graph.nodes[node]['func'] = \
                                     net.EqualModelAverageEdge(dim_in, dim_out,
                                                               num_parents,
-                                                              torch.nn.Linear(dim_in, dim_out, bias=True))
+                                                              torch.nn.Linear(dim_in, dim_out, bias=True))                                
                             elif model['node_type'] == "feedforward":
                                 hidden_layer = model['hidden_layers']
                                 logging.info(f'Feedforward with hidden layer sizes: {hidden_layer}')
@@ -129,6 +142,15 @@ def fill_graph(graph, input_spec, model_info):
                             logging.info(f"Processing learned edge")
                             if model['node_type'] == "linear":
                                 graph.nodes[node]['func'] = net.LinearScaleShift(dim_in, dim_out, num_inputs_parents)
+                            elif model['node_type'] == "poly-linear-scale-shift":
+                                poly_order = model['poly_order']
+                                poly_name = model['poly_name']  # HG or LU
+                                graph.nodes[node]['func'] = net.PolyScaleShift(
+                                    dim_in,
+                                    dim_out,
+                                    num_inputs_parents,
+                                    poly_order,
+                                    poly_name)
                             elif model['node_type'] == "feedforward":
                                 hidden_layer = model['hidden_layers']
                                 logging.info(f'Feedforward with hidden layer sizes: {hidden_layer}')
@@ -136,7 +158,7 @@ def fill_graph(graph, input_spec, model_info):
                                                                                      num_inputs_parents,
                                                                                      hidden_layer_sizes=hidden_layer)
                             else:
-                                raise Exception(f"Node type {model.node_type} unknown")
+                                raise Exception(f"Node type {model['node_type']} unknown")
 
                 
             graph.nodes[node]['dim_in'] = dim_in
