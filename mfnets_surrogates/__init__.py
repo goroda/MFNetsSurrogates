@@ -9,4 +9,3 @@ __version__ = "0.0"
 from mfnets_surrogates import net, net_pyro, net_torch
 from mfnets_surrogates.net_pyro import *
 from mfnets_surrogates.net_torch import *
-

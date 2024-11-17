@@ -190,13 +190,13 @@ def parse_model_info(args):
         name = model['name']
 
         try: 
-            train_input = pd.read_csv(model['train_input'], delim_whitespace=True)
+            train_input = pd.read_csv(model['train_input'], sep='\s+')
         except FileNotFoundError:
             print(f"Cannot open training inputs for model {name} in file {model['train_input']}")
             exit(1)
 
         try: 
-            train_output = pd.read_csv(model['train_output'], delim_whitespace=True)
+            train_output = pd.read_csv(model['train_output'], sep='\s+')
         except FileNotFoundError:
             print(f"Cannot open training outputs for model {name} in file {model['train_output']}")
             exit(1)            
@@ -229,7 +229,7 @@ def parse_evaluation_locations(input_spec):
                 model_evals[name] = []
                 for fname in filename:
                     try: 
-                        test_input = pd.read_csv(fname, delim_whitespace=True)
+                        test_input = pd.read_csv(fname, sep='\s+')
                     except FileNotFoundError:
                         print(f"Cannot open test inputs for model {name} in file {fname}")
                         exit(1)
@@ -238,7 +238,7 @@ def parse_evaluation_locations(input_spec):
 
             else:
                 try: 
-                    test_input = pd.read_csv(filename, delim_whitespace=True)
+                    test_input = pd.read_csv(filename, sep='\s+')
                 except FileNotFoundError:
                     print(f"Cannot open test inputs for model {name} in file {filename}")
                     exit(1)
