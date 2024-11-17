@@ -1,15 +1,15 @@
 ---
 num_models: 1
-save_dir: example_results_mo_gen_single_fidelity
+save_dir: results/ex7
 model_info: # names must match the nodes in the graph.edge_list file
   - 
       name: 1
-      train_input: example_data_mo/data2_in.txt
-      train_output: example_data_mo/data2_out.txt
+      train_input: sample_data/multi_output/data2_in.txt
+      train_output: sample_data/multi_output/data2_out.txt
       output_dir: resultsM2 
       test_output:
-        - example_data_mo/data2_in.txt
-        - example_data_mo/eval.txt #optional
+        - sample_data/multi_output/data2_in.txt
+        - sample_data/multi_output/eval.txt #optional
       
 inference_type: regression # regression # bayes
 algorithm:
@@ -24,7 +24,7 @@ algorithm:
   num_samples: 1000
   sample_output_files: posterior_samples.dat
 graph:
-  structure: example_data_mo/graph_sf.adj_list
+  structure: sample_data/multi_output/graph_sf.adj_list
   structure_format: adjacency list #default is edge list
   connection_type: general # node names below must match those above
   connection_models:
