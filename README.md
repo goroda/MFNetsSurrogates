@@ -128,10 +128,11 @@ surr_learned = surr.train(param0, all_nodes, input_train, output_train, std, nit
 # samples should be some inputs at which to evaluate the model
 evals_hf = surr_learned.forward(samples, num_nodes)
 evals_surr = surr_learned.get_evals() # can also get all the fidelity evaluations at *samples*
-   #+END_SRC
+```
 
-   To clarify the training function signature , below I reproduce the documentation of the function
-   #+BEGIN_SRC python 
+To clarify the training function signature , below I reproduce the documentation of the function
+
+```
     def train(self, param0in, nodes, xtrain, ytrain, stdtrain, niters=200,
               func=least_squares,
               verbose=False, warmup=True, opts=dict()):
