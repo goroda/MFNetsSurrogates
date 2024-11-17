@@ -42,3 +42,8 @@ This will create a new directory in `results/ex1` with the results for the first
   + SISO
   + Regression
   + Neural network
+
+- Example 8:
+  + SIMO 
+  + Regression
+  + Polynomial + Polynomial-Linear Scale shift

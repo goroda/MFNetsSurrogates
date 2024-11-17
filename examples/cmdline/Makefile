@@ -28,3 +28,7 @@ ex6:
 ex7: 
 	rm -rf results/ex7
 	python $(mfnet_cmd) input_files/ex7.yaml
+
+ex8: 
+	rm -rf results/ex8
+	python $(mfnet_cmd) input_files/ex8.yaml

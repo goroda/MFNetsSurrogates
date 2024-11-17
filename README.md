@@ -288,10 +288,11 @@ Please cite the following paper if you find this code to be useful
 ## More information
 
  Author: Alex Gorodetsky 
-
  Contact: <goroda@umich.edu>
-
  Copyright (c) 2020 Alex Gorodetsky  
-
  License: MIT
+ 
+ Contributors: 
+ John Jakeman, Sandia National Laboratories 
+ Xiaoshu Zeng, University of Southern California
 
