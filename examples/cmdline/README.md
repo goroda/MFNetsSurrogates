@@ -1,3 +1,11 @@
+This contains examples of how to run the mfnets cmdline interface. You can run any example by e.g., runnign
+
+```
+make ex1
+```
+
+This will create a new directory in `results/ex1` with the results for the first example. Below is a brief description of the examples. The training data is located in `sample_data/single_output` and `sample_data/multi_output`. You can check those files for the exact training/testing inputs and outputs. The values there are chosen to be fairly random, be warned.
+
 - Example 1:
   + SISO
   + Regression 
