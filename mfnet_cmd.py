@@ -55,7 +55,7 @@ class ModelDescription(pyd.BaseModel):
 
 class MCMCParams(pyd.BaseModel):
     burnin: int = pyd.Field(description="Burnin", default=100, gt=0)
-
+    num_samples: int = pyd.Field(description='number of samples', default=100, gt=0)
 
 class IAFParams(pyd.BaseModel):
     hidden_dim: int = pyd.Field(description="Burnin", default=10, gt=0)
@@ -64,15 +64,17 @@ class IAFParams(pyd.BaseModel):
     
 class Algorithm(pyd.BaseModel):
 
-    noise_var: float = pyd.Field(description="Noise of data.", gt=0)
+    noise_std: float = pyd.Field(description="Noise of data.", gt=0)
+    noise_std_predict: None | float = pyd.Field(description="Predict with noise addition", default=None,
+                                                gt=0)    
     parametrization: None | Literal['svi-normal', 'mcmc', 'svi-multinormal', 'svi-iafflow'] = pyd.Field(description="inference algorithm", default='svi-normal')
     mcmc_params: None | MCMCParams = pyd.Field(description="MCMC parameters.", default=None)
     iaf_params: None | IAFParams = pyd.Field(description="IAF parameters.", default=None)
     num_optimization_steps: int = pyd.Field(description="number of optimization steps", default=1000, gt=0)
-    num_samples: None | int = pyd.Field(description="Number of samples for Bayesian inference.", gt=0,
-                                        default=None)
+    num_pred_samples: None | int = pyd.Field(description="Number of samples for Bayesian inference.", gt=0,
+                                             default=None)
     sample_output_files: None | str = pyd.Field(description="File where to save samples.", default=None)
-
+    
 
 
 class Graph(pyd.BaseModel):
@@ -89,8 +91,7 @@ class Config(pyd.BaseModel):
     save_dir: str = pyd.Field(description="Save directory.")
     model_info: list[ModelDescription]
     inference_type: Literal['regression', 'bayes']
-    noise_std_predict: None | float = pyd.Field(description="Predict with noise addition", default=None,
-                                                gt=0)    
+    
     algorithm: Algorithm
 
     graph: Graph
@@ -430,8 +431,8 @@ if __name__ == "__main__":
         logger.info(f"Model: {model}")
         
         ## Algorithm parameters
-        alg = config_in.algorithm.parameterization
-        num_samples = config_in.algorithm.num_samples
+        alg = config_in.algorithm.parametrization
+        num_samples = config_in.algorithm.num_pred_samples
 
         ## Data setup
         if alg[:3] == 'svi':
@@ -512,8 +513,8 @@ if __name__ == "__main__":
                     results = pd.DataFrame(vals_unscaled, columns=model_info[node].train_out.columns)
                     results.to_csv(filename, sep=' ', index=False)
                 elif config_in.inference_type == "bayes":
-                    if config_in.noise_std_predict is not None:
-                        model.update_noise_std(config_in.noise_std_predict)
+                    if config_in.algorithm.noise_std_predict is not None:
+                        model.update_noise_std(config_in.algorithm.noise_std_predict)
                     vals_pred = model.predict([x_scaled], [node], num_samples)[1][0].detach().numpy()
                     for jj in range(num_samples):
                         filename_jj = filename + f"_{jj}"
