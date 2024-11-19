@@ -17,19 +17,10 @@ model_info: # names must match the nodes in the graph.edge_list file
       test_output:
         - sample_data/single_output/data2_in.txt
         - sample_data/single_output/eval.txt #optional
-      
 inference_type: regression # regression # bayes
 algorithm:
   noise_var: 1e-5 # just leave it here, doesnt do much yet
-  parameterization: svi-normal # (only for bayes) mcmc, svi-normal, svi-multinormal, svi-iafflow for bayes
-  mcmc_params: # only needed if mcmc is specified above
-    burnin: 100
-  iaf_params:
-    hidden_dim: 10
-    num_transforms: 10
   num_optimization_steps: 1000
-  num_samples: 1000
-  sample_output_files: posterior_samples.dat
 graph:
   structure: sample_data/single_output/graph.edge_list
   node_model: linear

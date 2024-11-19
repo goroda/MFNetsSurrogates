@@ -1,12 +1,18 @@
 """Command Line Utility for MFNETS."""
 import sys
 import yaml
+import json
 import os
 import logging
 import pathlib
 from collections import namedtuple
 
+from typing import Literal
+
 import argparse
+
+import pydantic as pyd
+
 import networkx as nx
 import torch
 import numpy as np
@@ -294,6 +300,55 @@ def model_info_to_dataloaders(model_info, graph_nodes):
 
     return data_loaders, scalers_in, scalers_out
 
+
+class ModelDescription(pyd.BaseModel):
+
+    name: str | int = pyd.Field(description="Name")
+    desc: str = pyd.Field(description="Description.", default="no description")
+    train_input: pyd.FilePath = pyd.Field(description="Training input file.")
+    train_output: pyd.FilePath = pyd.Field(description="Training output file.")
+    output_dir: str = pyd.Field(description="Path to output")
+    test_output: pyd.FilePath | list[pyd.FilePath] = pyd.Field(description="Testing input file.")
+
+
+class MCMCParams(pyd.BaseModel):
+    burnin: int = pyd.Field(description="Burnin", default=100, gt=0)
+
+
+class IAFParams(pyd.BaseModel):
+    hidden_dim: int = pyd.Field(description="Burnin", default=10, gt=0)
+    num_transforms_dim: int = pyd.Field(description="Burnin", default=10, gt=0)    
+    
+    
+class Algorithm(pyd.BaseModel):
+
+    noise_var: float = pyd.Field(description="Noise of data.", gt=0)
+    parametrization: None | Literal['svi-normal', 'mcmc', 'svi-multinormal', 'svi-iafflow'] = pyd.Field(description="inference algorithm", default='svi-normal')
+    mcmc_params: None | MCMCParams = pyd.Field(description="MCMC parameters.", default=None)
+    iaf_params: None | IAFParams = pyd.Field(description="IAF parameters.", default=None)
+    num_optimization_steps: int = pyd.Field(description="number of optimization steps", default=1000, gt=0)
+    num_samples: None | int = pyd.Field(description="Number of samples for Bayesian inference.", gt=0,
+                                        default=None)
+    sample_output_files: None | str = pyd.Field(description="File where to save samples.", default=None)
+
+
+class Graph(pyd.BaseModel):
+    structure: pyd.FilePath = pyd.Field(description="graph structure")
+    node_model: Literal['linear']
+    edge_model: Literal['linear']
+    connection_type: Literal['scale-shift']
+
+
+class Config(pyd.BaseModel):
+
+    num_models: int =  pyd.Field(description="Number of models", gt=0)
+    save_dir: str = pyd.Field(description="Save directory.")
+    model_info: list[ModelDescription]
+    inference_type: Literal['regression', 'bayes']
+    algorithm: Algorithm
+    graph: Graph
+
+
 if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(
@@ -316,6 +371,14 @@ if __name__ == "__main__":
         print(f"Cannot open input file {input_file}")
         exit(1)
 
+    # main_model_schema = Config.model_json_schema()  # (1)!
+    # print(json.dumps(main_model_schema, indent=2))  # (2)!        
+
+    # print(input_spec)
+    config = Config(**input_spec)
+    # print(config.model_dump_json(indent=2))
+
+        
     save_dir = pathlib.Path(input_spec['save_dir'])
     save_dir.mkdir(parents=True, exist_ok=True)
 
@@ -323,9 +386,11 @@ if __name__ == "__main__":
     # logger.FileHandler(save_dir / "log.log", 'w+')
 
     with open(save_dir / "input.yaml", "w", encoding="utf-8") as f:
-        yaml.dump(input_spec, f)
+        yaml.dump(config.model_dump(), f)
         
     # print(input_spec)
+
+    exit(1)
     
     model_info = parse_model_info(input_spec)
 
