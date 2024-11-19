@@ -4,8 +4,6 @@ import functools
 import itertools
 import logging
 
-logger = logging.getLogger(__name__)
-
 import pandas as pd
 
 import torch
@@ -194,7 +192,7 @@ class MFNetProbModel(pyro.nn.PyroModule):
         adam_params={"lr": 0.01, "betas": (0.95, 0.999)},
         max_steps=1000,
         print_frac=0.1,
-        logfile=None,
+        logger=None,
     ):
         """Train the model.
 
@@ -212,10 +210,6 @@ class MFNetProbModel(pyro.nn.PyroModule):
         self
         """
 
-        if logfile is not None:
-            logging.basicConfig(level=logging.INFO, filename=logfile)
-            logging.FileHandler(logfile, "w+")
-
         optimizer = Adam(adam_params)
         svi = SVI(self, guide, optimizer, loss=Trace_ELBO())
         self.guide = guide
@@ -232,8 +226,8 @@ class MFNetProbModel(pyro.nn.PyroModule):
             # self.model.zero_grad()
             elbo = svi.step(x, targets, y)
             if step % print_increment == 0:
-                if logfile is not None:
-                    logging.info(f"Iteration {step}\t Elbo loss: {elbo}")
+                if logger is not None:
+                    logger.info(f"Iteration {step}\t Elbo loss: {elbo}")
                 else:
                     print(f"Iteration {step}\t Elbo loss: {elbo}")
 

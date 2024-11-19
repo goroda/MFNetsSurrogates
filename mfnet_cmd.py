@@ -2,7 +2,8 @@
 import sys
 import yaml
 import os
-
+import logging
+import pathlib
 from collections import namedtuple
 
 import argparse
@@ -30,11 +31,8 @@ from pyro.infer.autoguide import (
 
 import pandas as pd
 
-import logging
-LOGFILE = "log.log"
-TRAINLOG = "train.log"
-logging.basicConfig(level=logging.INFO, filename=LOGFILE)
-logging.FileHandler(LOGFILE, 'w+')
+
+logger = logging.getLogger(__name__)
 
 ModelTrainData = namedtuple('ModelTrainData', ('train_in', 'train_out', 'dim_in', 'dim_out', 'output_dir'))
 
@@ -49,20 +47,14 @@ def fill_graph(graph, input_spec, model_info):
 
     
     if input_spec['graph']['connection_type'] == 'scale-shift':
-        logging.info('Scale-shift edge functions are used')
-        model = input_spec['graph']['connection_models']
+        logger.info('Scale-shift edge functions are used')
         for node in graph.nodes:
 
             # works because model names must match in the input file and in the graph.edge_list file
             dim_in = model_info[node].dim_in
             dim_out = model_info[node].dim_out
-            logging.info(f"Updating function for graph node {node}: dim_in = {dim_in}, dim_out = {dim_out}")
-            if model['node_type'] == "linear":
-                graph.nodes[node]['func'] = torch.nn.Linear(dim_in, dim_out, bias=True)
-
-            else:
-                raise NotImplementedError("node type other than linear or polynomial for scale shift")
-                
+            logger.info(f"Updating function for graph node {node}: dim_in = {dim_in}, dim_out = {dim_out}")
+            graph.nodes[node]['func'] = torch.nn.Linear(dim_in, dim_out, bias=True)
             graph.nodes[node]['dim_in'] = dim_in
             graph.nodes[node]['dim_out'] = dim_out
 
@@ -72,14 +64,14 @@ def fill_graph(graph, input_spec, model_info):
             dim_in = model_info[e2].dim_in
             dim_out_rows = model_info[e2].dim_out
             dim_out_cols = model_info[e1].dim_out
-            logging.info(f"Updating function for graph edge {e1}->{e2} (rho_[e1->e2](x)): dim_in = {dim_in}, dim_out = {dim_out_rows} x {dim_out_cols}, but flattened")
+            logger.info(f"Updating function for graph edge {e1}->{e2} (rho_[e1->e2](x)): dim_in = {dim_in}, dim_out = {dim_out_rows} x {dim_out_cols}, but flattened")
             graph.edges[e1, e2]['func'] = torch.nn.Linear(dim_in, dim_out_rows * dim_out_cols, bias=True)
             graph.edges[e1, e2]['out_rows'] = dim_out_rows
             graph.edges[e1, e2]['out_cols'] = dim_out_cols
             graph.edges[e1, e2]['dim_in'] = dim_in
 
     elif input_spec['graph']['connection_type'] == "general":
-        logging.info('General edge functions are used')
+        logger.info('General edge functions are used')
         for node in graph.nodes:
             dim_in = model_info[node].dim_in
             dim_out = model_info[node].dim_out
@@ -87,14 +79,14 @@ def fill_graph(graph, input_spec, model_info):
             num_inputs_parents = np.sum([model_info[p].dim_out for p in graph.predecessors(node)])
             num_parents = len([p for p in graph.predecessors(node)])
             
-            logging.info(f'Assigning model for node {node}')
-            logging.info(f'Number of parents for node {node} = {num_parents}')
+            logger.info(f'Assigning model for node {node}')
+            logger.info(f'Number of parents for node {node} = {num_parents}')
             # exit(1)
             # so far only use linear functions to test interface
             if num_inputs_parents == 0:
                 for model in input_spec['graph']['connection_models']:
                     if model['name'] == node:
-                        logging.info(f"Leaf node with type: {model['node_type']}")
+                        logger.info(f"Leaf node with type: {model['node_type']}")
                         if model['node_type'] == "linear":
                             graph.nodes[node]['func'] = torch.nn.Linear(dim_in, dim_out, bias=True)
                         elif model['node_type'] == "polynomial":
@@ -106,7 +98,7 @@ def fill_graph(graph, input_spec, model_info):
                                                                       poly_name)
                         elif model['node_type'] == "feedforward":
                             hidden_layer = model['hidden_layers']
-                            logging.info(f'Feedforward with hidden layer sizes: {hidden_layer}')
+                            logger.info(f'Feedforward with hidden layer sizes: {hidden_layer}')
                             graph.nodes[node]['func'] = net.FeedForwardNet(dim_in, dim_out,
                                                                            hidden_layer_sizes=hidden_layer)
                         else:
@@ -116,13 +108,13 @@ def fill_graph(graph, input_spec, model_info):
             else:
                 for model in input_spec['graph']['connection_models']:
                     if model['name'] == node:
-                        logging.info(f"Regular node with type: {model['node_type']}")
+                        logger.info(f"Regular node with type: {model['node_type']}")
                         try:
                             et = model['edge_type']
                         except KeyError:
                             et = None
                         if et == 'equal_model_average':
-                            logging.info(f"Processing model averaged edge")
+                            logger.info(f"Processing model averaged edge")
                             if model['node_type'] == "linear":
                                 graph.nodes[node]['func'] = \
                                     net.EqualModelAverageEdge(dim_in, dim_out,
@@ -130,7 +122,7 @@ def fill_graph(graph, input_spec, model_info):
                                                               torch.nn.Linear(dim_in, dim_out, bias=True))                                
                             elif model['node_type'] == "feedforward":
                                 hidden_layer = model['hidden_layers']
-                                logging.info(f'Feedforward with hidden layer sizes: {hidden_layer}')
+                                logger.info(f'Feedforward with hidden layer sizes: {hidden_layer}')
                                 graph.nodes[node]['func'] = \
                                     net.EqualModelAverageEdge(dim_in, dim_out,
                                                               num_parents,
@@ -139,7 +131,7 @@ def fill_graph(graph, input_spec, model_info):
                             else:
                                 raise Exception(f"Node type {model.node_type} unknown")
                         else:
-                            logging.info(f"Processing learned edge")
+                            logger.info(f"Processing learned edge")
                             if model['node_type'] == "linear":
                                 graph.nodes[node]['func'] = net.LinearScaleShift(dim_in, dim_out, num_inputs_parents)
                             elif model['node_type'] == "poly-linear-scale-shift":
@@ -153,7 +145,7 @@ def fill_graph(graph, input_spec, model_info):
                                     poly_name)
                             elif model['node_type'] == "feedforward":
                                 hidden_layer = model['hidden_layers']
-                                logging.info(f'Feedforward with hidden layer sizes: {hidden_layer}')
+                                logger.info(f'Feedforward with hidden layer sizes: {hidden_layer}')
                                 graph.nodes[node]['func'] = net.FullyConnectedNNEdge(dim_in, dim_out,
                                                                                      num_inputs_parents,
                                                                                      hidden_layer_sizes=hidden_layer)
@@ -166,7 +158,7 @@ def fill_graph(graph, input_spec, model_info):
             
             
     else:
-        logging.error(f"Connection type {model_info['graph']['connection_type']} is not recognized")
+        logger.error(f"Connection type {model_info['graph']['connection_type']} is not recognized")
         exit(1)
 
     return graph
@@ -185,26 +177,26 @@ def parse_graph(input_spec, model_info):
     structure_format = "edge list"
     if "structure_format" in input_spec['graph']:
         structure_format = input_spec['graph']['structure_format']
-    logging.info(f"Graph file type: {structure_format}")
+    logger.info(f"Graph file type: {structure_format}")
     if structure_format == "edge list":
         graph = fill_graph(nx.parse_edgelist(graph_read, create_using=nx.DiGraph, nodetype=int), input_spec, model_info)
     elif structure_format == "adjacency list":
         graph = fill_graph(nx.parse_adjlist(graph_read, create_using=nx.DiGraph, nodetype=int), input_spec, model_info)
     else:
-        logging.error(f"File type unrecognized")
+        logger.error(f"File type unrecognized")
         exit(1)
 
 
     roots = set([x for x in graph.nodes() if graph.in_degree(x) == 0])
 
-    logging.info(f"Root models: {roots}")
+    logger.info(f"Root models: {roots}")
     # exit(1)
     return graph, roots
 
 def parse_model_info(args):
     """Parse data files."""
     num_models = input_spec['num_models']
-    logging.info(f"Number of models: {num_models}")
+    logger.info(f"Number of models: {num_models}")
 
     models = {}
     for model in input_spec['model_info']:
@@ -231,7 +223,7 @@ def parse_model_info(args):
         output_dir = os.path.join(os.getcwd(), input_spec['save_dir'], model['output_dir'])
         
         models[name] = ModelTrainData(train_input, train_output, dim_in, dim_out, output_dir)
-        logging.info(f"Model {name}: number of inputs = {dim_in}, number of outputs = {dim_out}, ntrain = {train_output.shape[0]}, output_dir = {output_dir}")
+        logger.info(f"Model {name}: number of inputs = {dim_in}, number of outputs = {dim_out}, ntrain = {train_output.shape[0]}, output_dir = {output_dir}")
 
     return models
 
@@ -245,7 +237,7 @@ def parse_evaluation_locations(input_spec):
         if 'test_output' in model:
 
             filename = model['test_output']
-            logging.info(f"Will evaluate model {name} at inputs of file(s) {filename}")
+            logger.info(f"Will evaluate model {name} at inputs of file(s) {filename}")
 
             if isinstance(filename, list):
                 model_evals[name] = []
@@ -316,15 +308,23 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     input_file = args.input_file[0]
-    logging.info(f"Reading input Specs: {input_file}")
+    logger.info(f"Reading input Specs: {input_file}")
     try:
         with open(input_file, 'r') as file:
             input_spec = yaml.safe_load(file)
     except FileNotFoundError:
-        logging.error(f"Cannot open input file {input_file}")
+        print(f"Cannot open input file {input_file}")
         exit(1)
 
+    save_dir = pathlib.Path(input_spec['save_dir'])
+    save_dir.mkdir(parents=True, exist_ok=True)
 
+    logging.basicConfig(filename=save_dir / "log.log", level=logging.INFO)
+    # logger.FileHandler(save_dir / "log.log", 'w+')
+
+    with open(save_dir / "input.yaml", "w", encoding="utf-8") as f:
+        yaml.dump(input_spec, f)
+        
     # print(input_spec)
     
     model_info = parse_model_info(input_spec)
@@ -333,12 +333,10 @@ if __name__ == "__main__":
 
     target_nodes = list(graph.nodes)
     num_nodes = len(target_nodes)
-    logging.info(f"Node names: {target_nodes}")
+    logger.info(f"Node names: {target_nodes}")
 
     model_test_inputs = parse_evaluation_locations(input_spec)
 
-    save_dir = input_spec['save_dir']
-    os.makedirs(save_dir, exist_ok=True)
 
     # print(model_info)
     # exit(1)
@@ -348,26 +346,26 @@ if __name__ == "__main__":
     #########################
     ## Run algorithms
     if input_spec['inference_type'] == "regression":
-        logging.info("Performing Regression")
+        logger.info("Performing Regression")
         #################
         ## Pytorch
         model = net.MFNetTorch(graph, roots, edge_type=input_spec['graph']['connection_type'])
-        logging.info(f"Model: {model}")
+        logger.info(f"Model: {model}")
         
         ## Train
         loss_fns = net.construct_loss_funcs(model)        
         obj_func = model.train(data_loaders, target_nodes, loss_fns)
-        logging.info(f"Model Loss: {obj_func}")
+        logger.info(f"Model Loss: {obj_func}")
 
 
     elif input_spec['inference_type'] == "bayes": # 
 
-        logging.info("Running Bayesian Inference")
+        logger.info("Running Bayesian Inference")
         noise_std = float(input_spec['algorithm']['noise_std'])
 
         model = net_pyro.MFNetProbModel(graph, roots, noise_std=noise_std,
                                         edge_type=input_spec['graph']['connection_type'],)
-        logging.info(f"Model: {model}")
+        logger.info(f"Model: {model}")
         
         ## Algorithm parameters
         alg = input_spec['algorithm']['parameterization']
@@ -377,14 +375,14 @@ if __name__ == "__main__":
         ## Data setup
         if alg[:3] == 'svi':
             # SVI
-            logging.info("Running Stochastic Variational Inference")
+            logger.info("Running Stochastic Variational Inference")
             
             adam_params = {"lr": 0.005, "betas": (0.95, 0.999)}
             num_steps = input_spec['algorithm']['num_optimization_steps']
                         
             optimizer = Adam(adam_params)
             if alg == 'svi-normal':
-                logging.info("Approximating with an AutoNormal Guide")
+                logger.info("Approximating with an AutoNormal Guide")
                 guide = AutoNormal(model)
             elif alg == 'svi-multinormal':
                 guide = AutoMultivariateNormal(model)
@@ -395,14 +393,15 @@ if __name__ == "__main__":
                                       hidden_dim=hidden_dim,
                                       num_transforms=num_transforms)
             else:
-                logging.info(f"Algorithm \'{alg}\' is not recognized")
+                logger.info(f"Algorithm \'{alg}\' is not recognized")
                 exit(1)
 
 
-            logging.info(f"Number of steps = {num_steps}")                
-            model.train_svi(data_loaders, target_nodes, guide, adam_params, max_steps=num_steps, logfile=TRAINLOG)
+            logger.info(f"Number of steps = {num_steps}") 
+            model.train_svi(data_loaders, target_nodes, guide, adam_params, max_steps=num_steps,
+                            logger=logger)
 
-            # logging.info(f"Iteration {step}\t Elbo loss: {elbo}")            
+            # logger.info(f"Iteration {step}\t Elbo loss: {elbo}")            
         elif alg == 'mcmc':
             raise InputError("Cannot Run MCMC yet")
             # MCMC
@@ -423,19 +422,19 @@ if __name__ == "__main__":
             param_samples = mcmc.get_samples()
 
         else:
-            logging.info(f"Algorithm \'{alg}\' is not recognized")
+            logger.info(f"Algorithm \'{alg}\' is not recognized")
             exit(1)
 
 
     ## Evaluate and save to file
-    logging.info(f"Evaluating Test data")
+    logger.info(f"Evaluating Test data")
     if input_spec['inference_type'] == "bayes":
-        logging.info(f"Number of prediction samples: {num_samples}")
+        logger.info(f"Number of prediction samples: {num_samples}")
         
     for node in graph.nodes:
         test_pts = model_test_inputs[node]
         if test_pts is not None:
-            logging.info(f"Evaluating model {node} at test points")
+            logger.info(f"Evaluating model {node} at test points")
 
             for (fname, data) in test_pts:
                 # print("fname = ", fname)

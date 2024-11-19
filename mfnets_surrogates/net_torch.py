@@ -27,7 +27,7 @@ __all__ = [
     "FullyConnectedNNEdge",
     "EqualModelAverageEdge",
     "LinearScaleShift",
-    "PolyScaleShift"
+    "PolyScaleShift",
 ]
 
 
@@ -227,11 +227,13 @@ class LinearScaleShift(nn.Module):
 
         return edge_func + node_func
 
+
 class PolyScaleShift(nn.Module):
     """A generalized scale and shift operator for the MFNET"""
 
-    def __init__(self, dim_in, dim_out, num_parent_vals_in,
-                 poly_order, poly_name):
+    def __init__(
+        self, dim_in, dim_out, num_parent_vals_in, poly_order, poly_name
+    ):
         """Initialize the PolynomialScaleShift node for the MFNET
 
         f_{j} = edge(x) \vec{parent_outputs} + node(x)
@@ -249,8 +251,8 @@ class PolyScaleShift(nn.Module):
         num_parent_vals_in : integer
             Dimension of outputs of the parents
 
-        poly_order: integer 
-            polynomial order 
+        poly_order: integer
+            polynomial order
 
         poly_name: str 'Hermite' or 'Legendre'
         """
@@ -286,7 +288,7 @@ class PolyScaleShift(nn.Module):
 
         node_func = self.node(xinput)
 
-        return edge_func + node_func    
+        return edge_func + node_func
 
 
 def make_graph_single():
