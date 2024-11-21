@@ -97,6 +97,10 @@ class Graph(pyd.BaseModel):
 
 class Config(pyd.BaseModel):
 
+    # below line is needed because I have a model_info and model_ is protected by pydantic for some reason
+    model_config  = pyd.ConfigDict(protected_namespaces=())
+
+    
     num_models: int =  pyd.Field(description="Number of models", gt=0)
     save_dir: str = pyd.Field(description="Save directory.")
     model_info: list[ModelDescription]

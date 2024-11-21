@@ -26,7 +26,7 @@ algorithm:
   num_optimization_steps: 1000
 graph:
   structure: sample_data/multi_output/graph.edge_list
-  connection_type: general # node names below must match those above
+  connection_type: general 
   connection_models:
     -
       name: 1
