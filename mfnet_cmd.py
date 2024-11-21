@@ -76,14 +76,24 @@ class Algorithm(pyd.BaseModel):
     sample_output_files: None | str = pyd.Field(description="File where to save samples.", default=None)
     
 
+class ConnectionModel(pyd.BaseModel):
+
+    name: int | str = pyd.Field(description="model whose structure is being described")
+    node_type: Literal['linear', 'feedforward', 'polynomial', 'poly-linear-scale-shift'] = pyd.Field(description="Node/edge model type")
+    hidden_layers: None | list[int] = pyd.Field(description="hidden layer architecture in an mlp model", default=None)
+    poly_order: None | int = pyd.Field(description="polynomial order", default=None)
+    poly_name: None | Literal['hermite', 'legendre']  = pyd.Field(description="polynomial type", default=None)
+    edge_type: Literal['equal_model_average', 'normal'] = pyd.Field(description="special edge type", default='normal')
+    
+    
 
 class Graph(pyd.BaseModel):
     structure: pyd.FilePath = pyd.Field(description="graph structure")
     structure_format: Literal['edge list', 'adjacency list'] = pyd.Field(description="format of graph structure", default='edge list')
-    node_model: Literal['linear']
-    edge_model: Literal['linear']
-    connection_type: Literal['scale-shift', 'general'] = pyd.Field(Description="graph connection type")
-
+    connection_type: Literal['scale-shift', 'general'] = pyd.Field(description="graph connection type")    
+    node_model: None | Literal['linear'] = pyd.Field(description="Node model for scale-shift model", default=None)
+    edge_model: None | Literal['linear'] = pyd.Field(description="Edge model for scale-shift model", default=None)    
+    connection_models: None | list[ConnectionModel] = pyd.Field(description="node and edge types")
 
 class Config(pyd.BaseModel):
 
@@ -176,20 +186,20 @@ def fill_graph(graph: nx.Graph, config: Config, model_info: dict[int | str, Mode
             # exit(1)
             # so far only use linear functions to test interface
             if num_inputs_parents == 0:
-                for model in config['graph']['connection_models']:
-                    if model['name'] == node:
-                        logger.info(f"Leaf node with type: {model['node_type']}")
-                        if model['node_type'] == "linear":
+                for model in config.graph.connection_models:
+                    if model.name == node:
+                        logger.info(f"Leaf node with type: {model.node_type}")
+                        if model.node_type == "linear":
                             graph.nodes[node]['func'] = torch.nn.Linear(dim_in, dim_out, bias=True)
-                        elif model['node_type'] == "polynomial":
-                            poly_order = model['poly_order']
-                            poly_name = model['poly_name']  # HG or LU
+                        elif model.node_type == "polynomial":
+                            poly_order = model.poly_order
+                            poly_name = model.poly_name  # HG or LU
                             graph.nodes[node]['func'] = pce_model.PCE(dim_in,
                                                                       dim_out,
                                                                       poly_order,
                                                                       poly_name)
-                        elif model['node_type'] == "feedforward":
-                            hidden_layer = model['hidden_layers']
+                        elif model.node_type == "feedforward":
+                            hidden_layer = model.hidden_layers
                             logger.info(f'Feedforward with hidden layer sizes: {hidden_layer}')
                             graph.nodes[node]['func'] = net.FeedForwardNet(dim_in, dim_out,
                                                                            hidden_layer_sizes=hidden_layer)
@@ -198,22 +208,22 @@ def fill_graph(graph: nx.Graph, config: Config, model_info: dict[int | str, Mode
                         break
                                 
             else:
-                for model in config['graph']['connection_models']:
-                    if model['name'] == node:
-                        logger.info(f"Regular node with type: {model['node_type']}")
+                for model in config.graph.connection_models:
+                    if model.name == node:
+                        logger.info(f"Regular node with type: {model.node_type}")
                         try:
-                            et = model['edge_type']
+                            et = model.edge_type
                         except KeyError:
                             et = None
                         if et == 'equal_model_average':
                             logger.info(f"Processing model averaged edge")
-                            if model['node_type'] == "linear":
+                            if model.node_type == "linear":
                                 graph.nodes[node]['func'] = \
                                     net.EqualModelAverageEdge(dim_in, dim_out,
                                                               num_parents,
                                                               torch.nn.Linear(dim_in, dim_out, bias=True))                                
-                            elif model['node_type'] == "feedforward":
-                                hidden_layer = model['hidden_layers']
+                            elif model.node_type == "feedforward":
+                                hidden_layer = model.hidden_layers
                                 logger.info(f'Feedforward with hidden layer sizes: {hidden_layer}')
                                 graph.nodes[node]['func'] = \
                                     net.EqualModelAverageEdge(dim_in, dim_out,
@@ -224,25 +234,25 @@ def fill_graph(graph: nx.Graph, config: Config, model_info: dict[int | str, Mode
                                 raise Exception(f"Node type {model.node_type} unknown")
                         else:
                             logger.info(f"Processing learned edge")
-                            if model['node_type'] == "linear":
+                            if model.node_type == "linear":
                                 graph.nodes[node]['func'] = net.LinearScaleShift(dim_in, dim_out, num_inputs_parents)
-                            elif model['node_type'] == "poly-linear-scale-shift":
-                                poly_order = model['poly_order']
-                                poly_name = model['poly_name']  # HG or LU
+                            elif model.node_type == "poly-linear-scale-shift":
+                                poly_order = model.poly_order
+                                poly_name = model.poly_name  # HG or LU
                                 graph.nodes[node]['func'] = net.PolyScaleShift(
                                     dim_in,
                                     dim_out,
                                     num_inputs_parents,
                                     poly_order,
                                     poly_name)
-                            elif model['node_type'] == "feedforward":
-                                hidden_layer = model['hidden_layers']
+                            elif model.node_type == "feedforward":
+                                hidden_layer = model.hidden_layers
                                 logger.info(f'Feedforward with hidden layer sizes: {hidden_layer}')
                                 graph.nodes[node]['func'] = net.FullyConnectedNNEdge(dim_in, dim_out,
                                                                                      num_inputs_parents,
                                                                                      hidden_layer_sizes=hidden_layer)
                             else:
-                                raise Exception(f"Node type {model['node_type']} unknown")
+                                raise Exception(f"Node type {model.node_type} unknown")
 
                 
             graph.nodes[node]['dim_in'] = dim_in
@@ -250,7 +260,7 @@ def fill_graph(graph: nx.Graph, config: Config, model_info: dict[int | str, Mode
             
             
     else:
-        logger.error(f"Connection type {model_info['graph']['connection_type']} is not recognized")
+        logger.error(f"Connection type {model_info.graph.connection_type} is not recognized")
         exit(1)
 
     return graph

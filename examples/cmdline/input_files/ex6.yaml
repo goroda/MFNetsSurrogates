@@ -3,12 +3,12 @@ num_models: 2
 save_dir: results/ex6
 model_info: # names must match the nodes in the graph.edge_list file
   - 
-      name: 1 # must match edge_list file
-      desc_name: # use this for descriptive name
+      name: 1 
+      desc_name: 
       train_input: sample_data/single_output/data1_in.txt # headers needed
       train_output: sample_data/single_output/data1_out.txt # headers needed
       output_dir: resultsM1 # relative filename
-      test_output: sample_data/single_output/eval.txt # optional
+      test_output: sample_data/single_output/eval.txt 
   - 
       name: 2
       train_input: sample_data/single_output/data2_in.txt
@@ -16,11 +16,11 @@ model_info: # names must match the nodes in the graph.edge_list file
       output_dir: resultsM2 
       test_output:
         - sample_data/single_output/data2_in.txt
-        - sample_data/single_output/eval.txt #optional
+        - sample_data/single_output/eval.txt 
       
-inference_type: regression # regression # bayes
+inference_type: regression 
 algorithm:
-  noise_var: 1e-5 # just leave it here, doesnt do much yet
+  noise_std: 1e-5 
 graph:
   structure: sample_data/single_output/graph.edge_list
   connection_type: general
