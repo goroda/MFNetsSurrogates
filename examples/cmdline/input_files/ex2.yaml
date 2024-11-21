@@ -20,15 +20,9 @@ model_info: # names must match the nodes in the graph.edge_list file
       
 inference_type: bayes
 algorithm:
-  noise_std: 1e-3 # just leave it here, doesnt do much yet
-  noise_std_predict: 1e-13  # include if want to predict with a different noise after training
-  parameterization: svi-normal # (only for bayes) mcmc, svi-normal, svi-multinormal, svi-iafflow for bayes
-  mcmc_params: # only needed if mcmc is specified above
-    burnin: 100
-    num_samples: 100 # number of MCMC samples
-  iaf_params: #only needed if svi-iafflow
-    hidden_dim: 10
-    num_transforms: 10
+  noise_std: 1e-3 
+  noise_std_predict: 1e-13  
+  parameterization: svi-normal 
   num_optimization_steps: 5000
   num_pred_samples: 1000 # number of samples for prediction
   sample_output_files: posterior_samples.dat
@@ -36,7 +30,7 @@ graph:
   structure: sample_data/single_output/graph.edge_list
   node_model: linear
   edge_model: linear
-  connection_type: scale-shift # composition (eventually)
+  connection_type: scale-shift 
 ...
 
   
