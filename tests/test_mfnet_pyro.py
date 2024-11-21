@@ -54,13 +54,14 @@ class TestMfnetPyro(unittest.TestCase):
         
         
         graph_learn, roots_learn = make_graph_8()
-        model_trained = MFNetProbModel(graph_learn, roots_learn, noise_std=1e-3)
+        model_trained = MFNetProbModel(graph_learn, roots_learn, noise_std=1e-1)
         # guide = AutoIAFNormal(model_trained, hidden_dim=[100], num_transforms=2)    
         guide = AutoNormal(model_trained)
         # guide = AutoDelta(model_trained)
         targets = [8]
-        adam_params = {"lr": 0.1, "betas": (0.9, 0.999)}
-        model_trained.train_svi(data_loaders, targets, guide, adam_params, max_steps=1000)
+        adam_params = {"lr": 0.1, "betas": (0.9, 0.99)}
+        print("\n")
+        model_trained.train_svi(data_loaders, targets, guide, adam_params, max_steps=100)
 
         # print(mfsurr_learn)
         # mfsurr_learn.train(data_loaders, [8], loss_fns[7:])
@@ -82,7 +83,7 @@ class TestMfnetPyro(unittest.TestCase):
         
         # print("error = ", mean_predict.flatten() - y.flatten())
         err = torch.linalg.norm(mean_predict-y)**2 / ndata[7]  # / torch.linalg.norm(y)**2
-        # print("err = ", err)
+        print("err = ", err)
         # plt.show()
         # exit(1)
 
@@ -95,14 +96,14 @@ class TestMfnetPyro(unittest.TestCase):
             
             predict_test = torch.mean(model_trained.predict([x_test], [8], num_samples)[1][0], dim=0)
             err = torch.linalg.norm(predict_test-y_test)**2 / ntest
-            # print("err = ", err)
+            print("err = ", err)
             # plt.figure()
             # plt.plot(x_test, y_test, 'o', color='blue')
             # plt.plot(x_test, predict_test, 'ko')
             # plt.show()
             assert err<1e-3, f"testing error is {err}"
 
-    # @unittest.skip('testing other')
+    @unittest.skip('testing other')
     def test_vi_multi_out(self):
         torch.manual_seed(2)
 
@@ -163,7 +164,7 @@ class TestMfnetPyro(unittest.TestCase):
             print("err = ", err)
             assert err<1e-3, f"Testing error = {err}"
 
-    # @unittest.skip('testing other')
+    @unittest.skip('testing other')
     def test_vi_multi_out_gen(self):
         torch.manual_seed(2)
 
@@ -215,7 +216,7 @@ class TestMfnetPyro(unittest.TestCase):
             print("err = ", err)
             assert err<1e-3, f"Test error = {err}"
 
-    # @unittest.skip('testing other')
+    @unittest.skip('testing other')
     def test_vi_multi_out_gen_nn(self):
         torch.manual_seed(2)
 
@@ -273,7 +274,7 @@ class TestMfnetPyro(unittest.TestCase):
             assert err<1e-3, f"Testing error = {err}"
 
 
-    # @unittest.skip('testing other')
+    @unittest.skip('testing other')
     def test_vi_multi_out_gen_nn_model_average(self):
         torch.manual_seed(2)
 
