@@ -165,30 +165,24 @@ class TestMfnet(unittest.TestCase):
             print("err = ", err)
             assert err<1e-3
 
-    @unittest.skip('testing other')
+    # @unittest.skip('testing other')
     def test_least_squares_opt_multi_out_gen_nn(self):
         torch.manual_seed(2)
 
         # print("\n")
-        # graph, roots, dim_out = make_graph_4gen_nn()
-        graph, roots, dim_out = make_graph_4()
+        graph, roots, dim_out = make_graph_4gen_nn()
+        # graph, roots, dim_out = make_graph_4()
 
         node = 4
 
+        
         ## Truth
-        # mfsurr_true = MFNetTorch(graph, roots, edge_type="general")
-        mfsurr_true = MFNetTorch(graph, roots)        
-
         dx = 1
         ndata = [0] * 4
         ndata[3] = 500
-        x = torch.rand(ndata[3], 1)
-        # y =  mfsurr_true.forward([x]*4,[1, 2, 3, 4])
+        x = torch.rand(ndata[3], 1)        
+        mfsurr_true = MFNetTorch(graph, roots, edge_type="general")
         y =  mfsurr_true.forward([x], [4])[0]
-        # print("\n")
-        # print("yshapes = ", [yy.size() for yy in y])
-        # print("y = ", y)
-        # exit(1)
         std = 1e-4
 
         # learning
@@ -201,19 +195,18 @@ class TestMfnet(unittest.TestCase):
                                                     batch_size=ndata[3],
                                                     shuffle=False)]
         # print(mfsurr_learn)
-        mfsurr_learn.train(data_loaders, [node], loss_fns[(node-1):],
-                           max_iter=1000)
-
+        train_loss = mfsurr_learn.train(data_loaders, [node], loss_fns[(node-1):],
+                                        max_iter=1000)
+        assert train_loss < 1e-4
         print("\n")
+        print("train loss = ", train_loss)        
         with torch.no_grad():
             predict = mfsurr_learn([x],[node])[0]
-            # print(dim_out)
-            # print(predict.size())
             assert predict.size(dim=1) == dim_out[node-1]
-
-            err = torch.linalg.norm(predict-y)**2/2
-            print("err = ", err)
+            err = torch.mean((predict-y)**2)
+            print("err final model = ", err)
             assert err<1e-4
+            assert np.abs(err.item() - train_loss) < 1e-10
 
         ntest=1000
         x_test = torch.rand(ntest, dx)

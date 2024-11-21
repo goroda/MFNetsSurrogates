@@ -1,6 +1,7 @@
 """MFnets using pytorch."""
 
 import itertools
+from typing import Literal
 import copy
 
 import torch
@@ -493,7 +494,9 @@ def make_graph_8():
 class MFNetTorch(nn.Module):
     """Multifidelity Network."""
 
-    def __init__(self, graph, roots, edge_type="scale-shift"):
+    def __init__(self, graph: nx.Graph,
+                 roots: list[str | int],
+                 edge_type: Literal['scale-shift', 'general'] = "scale-shift"):
         """Initialize a multifidelity surrogate via a graph and its roots.
 
         Parameters
@@ -739,8 +742,13 @@ class MFNetTorch(nn.Module):
 
         self.zero_grad()
 
-        optimizer.step(closure)
-        return self.eval_loss(data, targets, loss_fns)
+        orig_loss = optimizer.step(closure)
+        out = optimizer.state_dict()
+        loss = out['state'][0]['prev_loss'] 
+        # print("Loss = ", loss)
+        # print("states", out['state']['prev_loss'])
+        # print(optimizer.state_dict())
+        return loss
 
 
 def generate_data(model, ndata):
