@@ -224,6 +224,9 @@ class MFNetProbModel(pyro.nn.PyroModule):
         print_increment = int(print_frac * max_steps)
         for step in range(max_steps):
             # self.model.zero_grad()
+            print("x = ", [xx.shape for xx in x])
+            print("targets = ", targets)
+            print("y = ", [yy.shape for yy in y])
             elbo = svi.step(x, targets, y)
             if step % print_increment == 0:
                 if logger is not None:

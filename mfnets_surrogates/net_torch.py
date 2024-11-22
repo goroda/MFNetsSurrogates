@@ -622,6 +622,8 @@ class MFNetTorch(nn.Module):
         anc_and_target = anc.union(set([target_node]))
         relevant_root_nodes = anc.intersection(self.roots)
 
+        print("eval target node scale shift = ", xinput.shape)
+        print("target = ", target_node)
         # Evaluate the target nodes and all ancestral nodes and put the root
         # nodes in a queue
         queue = SimpleQueue()
@@ -644,11 +646,11 @@ class MFNetTorch(nn.Module):
                 if child in anc_and_target:
                     pval = self.graph.edges[node, child]["func"](xinput)
 
-                    # print("\n")
-                    # print("node = ", node)
-                    # print("child = ", child)
-                    # print("pval shape", pval.shape)
-                    # print(self.graph.edges[node, child]['out_rows'],  self.graph.edges[node, child]['out_cols'])
+                    print("\n")
+                    print("node = ", node)
+                    print("child = ", child)
+                    print("pval shape", pval.shape)
+                    print(self.graph.edges[node, child]['out_rows'],  self.graph.edges[node, child]['out_cols'])
                     pval = pval.reshape(
                         pval.size(dim=0),
                         self.graph.edges[node, child]["out_rows"],
@@ -699,6 +701,7 @@ class MFNetTorch(nn.Module):
         -------
         list of evaluations for each of the target nodes
         """
+        print("in forward torch x = ", [xx.shape for xx in xinput])
         vals = [
             self.eval_target_node(x, t) for x, t in zip(xinput, target_nodes)
         ]
