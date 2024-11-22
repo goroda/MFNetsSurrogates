@@ -96,6 +96,7 @@ class TestMfnetPyro(unittest.TestCase):
         guide = AutoNormal(model_trained)
         targets = [4]
         adam_params = {"lr": 0.1, "betas": (0.9, 0.999)}
+        print("\n\n\nSTART TRAINING")
         model_trained.train_svi(data_loaders, targets, guide, adam_params, max_steps=1000)
 
         # print("\n")

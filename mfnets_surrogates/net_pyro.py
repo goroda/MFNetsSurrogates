@@ -154,7 +154,7 @@ class MFNetProbModel(pyro.nn.PyroModule):
 
         y: list of observations for each of the nodes
         """
-
+        print("in forward x = ", [xx.shape for xx in x])
         means = self.model(x, targets)
         if y == None:
             for ii, (m, xx) in enumerate(zip(means, x)):

@@ -650,6 +650,9 @@ class MFNetTorch(nn.Module):
                     print("node = ", node)
                     print("child = ", child)
                     print("pval shape", pval.shape)
+                    print("xinput shape", xinput.shape)
+                    print(self.graph.edges[node, child]["func"])
+                    print(self.graph.edges[node, child]["func"](xinput).shape)
                     print(self.graph.edges[node, child]['out_rows'],  self.graph.edges[node, child]['out_cols'])
                     pval = pval.reshape(
                         pval.size(dim=0),
