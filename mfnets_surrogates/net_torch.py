@@ -654,6 +654,20 @@ class MFNetTorch(nn.Module):
                     print(self.graph.edges[node, child]["func"])
                     print(self.graph.edges[node, child]["func"](xinput).shape)
                     print(self.graph.edges[node, child]['out_rows'],  self.graph.edges[node, child]['out_cols'])
+                    if pval.shape[1] != self.graph.edges[node, child]['out_rows']*  self.graph.edges[node, child]['out_cols']:
+                        print("shape doesnt make sense")
+                        print("xinput.shape", xinput.shape)
+                        current_model = self.graph.edges[node, child]["func"]
+                        print("current_model = ", current_model)
+                        test_in = torch.rand(4,1)
+                        test_out = current_model(test_in)
+                        print(test_out.shape)
+                        for name, value in list(current_model.named_parameters(recurse=False)):
+                            print("lets go")
+                            print(name, value.size())
+                            
+                        exit(1)
+                    
                     pval = pval.reshape(
                         pval.size(dim=0),
                         self.graph.edges[node, child]["out_rows"],
